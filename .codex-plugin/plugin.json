@@ -1,6 +1,6 @@
 {
   "name": "email-agent",
-  "version": "0.1.0+codex.20260904214322",
+  "version": "0.1.0+codex.20260904220654",
   "description": "Compact multi-account Gmail with purpose notes and explicit sender selection.",
   "author": {
     "name": "Jackson Stone",

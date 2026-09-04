@@ -17,7 +17,7 @@ The independent client uses Python standard library and macOS Keychain. No gogcl
 
 The dedicated Google Cloud project has Gmail API enabled, a Desktop OAuth client named Email Agent Desktop, and an External audience. The publishing status was verified as **In production** before any mailbox was connected. Google's unverified-app notice remains for this personal-use application; production status does not imply Google verification.
 
-All three locally configured accounts, `personal`, `dittodub` (previously `work`), and `maker`, are authenticated. For each account:
+The first three configured accounts, `personal`, `dittodub` (previously `work`), and `maker`, were authenticated and verified as follows:
 
 - The initial token exchange returned exactly `gmail.readonly` and `gmail.send`.
 - The Gmail profile matched the configured email address before the refresh token was stored.
@@ -40,4 +40,13 @@ The company mailbox now uses a company-specific account ID instead of the generi
 
 Team was added and verified through Gmail's normal Send mail as UI. The installed plugin sent one clearly labeled Team test to the user's personal mailbox with a stable request ID. Exactly one copy arrived; its From was the verified Team identity, Reply-To was Team, To and Delivered-To matched the personal mailbox, and the body matched the sent copy after transport whitespace normalization. No reply was sent to the shared group.
 
-Contact is configured in local notes but Gmail still reports it not configured, so the client blocks it from sending. Its Gmail setup form was filled, but Chrome's automation tool reports an open extension UI blocking further interaction. The user has been asked to dismiss that popup; Contact verification and its live sender test remain pending. Repeated state checks confirm the same blocker. Neither alias requires additional OAuth scopes, settings-write permission, or a new token grant.
+Contact's setup was completed after the user sent the verification email. Google's confirmation page was completed, and the Gmail API now reports both Team and Contact accepted. The installed plugin sent one clearly labeled Contact test to the personal mailbox with its own stable request ID. Exactly one copy arrived with the correct Contact From and Reply-To, personal To/Delivered-To, and matching body. No test reply was sent to either shared group. Neither alias required additional OAuth scopes, settings-write permission, or a new token grant.
+
+
+## Fourth company mailbox
+
+The `runs-the-place` account was connected through its dedicated Runs-The-Place Chrome profile. The profile's signed-in email matched the requested mailbox. Local purpose notes reserve this identity for that company's management, setup, operations, and business correspondence, separately from DittoDub, other companies, personal mail, and unrelated personal development.
+
+The initial exchange granted exactly Gmail read and send scopes. The exact Gmail profile identity was verified before storage in macOS Keychain, and an immediate refresh exchange passed. A fresh process using the installed plugin then verified identity, searched an inbox message, and read a 1,243-character body within the default 4,000-character limit. No message content or new mailbox credentials were included in this report or repository. Account metadata remains outside Git with file mode 600.
+
+All four configured mailboxes are now authenticated. Team and Contact remain shared sending aliases of the DittoDub mailbox, with separate purpose notes and accepted Gmail verification.

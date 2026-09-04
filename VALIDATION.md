@@ -15,6 +15,6 @@ The independent client uses Python standard library and macOS Keychain. No gogcl
 
 ## Live authentication boundary
 
-The intended personal owner account is signed into Google Cloud. The dedicated OAuth setup and publishing status are being configured. The two mailbox entries are **configured but not authenticated**. `doctor` correctly reports `Dedicated OAuth client is not configured`.
+The intended personal owner account is signed into Google Cloud. A dedicated Email Agent project was created and Gmail API is enabled. App registration is prepared at the final Google API Services User Data Policy agreement; acceptance is awaiting user confirmation required by the Computer Use tool. OAuth credentials and production publishing status are not configured yet. The two mailbox entries are **configured but not authenticated**. `doctor` correctly reports `Dedicated OAuth client is not configured`.
 
 Real Gmail scopes, OAuth refresh, read access, and message delivery are not yet verified. No real email has been sent. The application verifies refresh and identity automatically when each account completes connection. A real send is deferred until the user requests a message to a specified recipient.

@@ -1,0 +1,21 @@
+# Private account metadata belongs on this machine.
+accounts.local.json
+
+# Credentials and downloaded message content must not enter version control.
+.env
+.env.*
+credentials*.json
+client_secret*.json
+token*.json
+*.eml
+attachments/
+__pycache__/
+*.pyc
+*.sqlite3*
+.venv/
+message.local.json
+oauth*.json
+connection-status*.json
+*.pem
+*.key
+.DS_Store

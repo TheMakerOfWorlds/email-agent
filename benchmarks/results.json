@@ -1,0 +1,20 @@
+{
+  "fixture": "Synthetic 10-message header page and long message; not live email or billing.",
+  "tokenizer": "tiktoken/o200k_base",
+  "discovery_metadata_tokens": 23,
+  "full_skill_tokens": 296,
+  "mcp_tool_schemas_added": 0,
+  "search": {
+    "unprojected_headers_tokens": 743,
+    "compact_headers_tokens": 521,
+    "reduction_percent": 29.9
+  },
+  "read": {
+    "unprojected_full_message_tokens": 21929,
+    "compact_default_chunk_tokens": 739,
+    "full_body_chars": 21400,
+    "returned_body_chars": 4000,
+    "remainder_available": true,
+    "reduction_percent": 96.6
+  }
+}

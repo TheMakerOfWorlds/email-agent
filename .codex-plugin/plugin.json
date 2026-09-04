@@ -1,0 +1,31 @@
+{
+  "name": "email-agent",
+  "version": "0.1.0+codex.20260904202437",
+  "description": "Compact multi-account Gmail with purpose notes and explicit sender selection.",
+  "author": {
+    "name": "Jackson Stone",
+    "url": "https://github.com/TheMakerOfWorlds"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Email Agent",
+    "shortDescription": "Read and send Gmail with less context.",
+    "longDescription": "An independent local Gmail client with named accounts, purpose notes, compact results, and Gmail-only OAuth permissions.",
+    "developerName": "Jackson Stone",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "defaultPrompt": [
+      "Find important unread mail across my accounts.",
+      "Use my work account to reply to this message."
+    ]
+  },
+  "license": "MIT",
+  "keywords": [
+    "email",
+    "gmail",
+    "multi-account"
+  ]
+}

@@ -106,7 +106,7 @@ def main():
             phase = report.get("phase", "unknown")
             if not re.fullmatch(r"[a-z_]{1,40}", str(phase)):
                 phase = "unknown"
-            raise MailError("Remote setup failed during " + phase + "; existing credentials and partial progress were preserved. Retry after resolving that phase.")
+            raise MailError("Remote setup failed during " + phase + "; partial progress remains. Retry after resolving that phase.")
         mail.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         temp = target_path.with_suffix(".tmp")
         fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

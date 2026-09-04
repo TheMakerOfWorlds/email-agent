@@ -57,3 +57,5 @@ python3 -m unittest discover -s tests -v
 The repository owns the Gmail, OAuth, MIME, routing, and output code. It does not download or auto-update another email CLI. Dependencies on macOS, Python, and Google's APIs remain; occasional compatibility/security maintenance may still be needed. The earlier gogcli adapter and installer were removed.
 
 Optional development tools are PyYAML for Codex validators and tiktoken for the benchmark. They are not runtime dependencies. See [VALIDATION.md](VALIDATION.md) for tested behavior and remaining live checks.
+
+Google's consent screen links to the owner's [public app information and privacy notice](https://gist.github.com/TheMakerOfWorlds/0ea2b4aa332d760f4a08269a8d146196). Its [source](docs/public-information.md) is maintained here. The notice is public; private account configuration and credentials are not part of the repository or plugin package.

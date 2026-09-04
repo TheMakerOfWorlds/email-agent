@@ -6,7 +6,7 @@ Requires Python 3.10+ on macOS. No Python package installation is needed. Use a 
 
 1. Sign into Google Cloud with the intended owner account. Create a dedicated project named Email Agent. Do not attach billing or enable unrelated services.
 2. Enable **Gmail API** only.
-3. Configure Google Auth Platform branding as **Email Agent**, with your support/contact email. Use **External** audience because both a personal Gmail and a Workspace account will connect.
+3. Configure Google Auth Platform branding as **Email Agent**, with your support/contact email. Use **External** audience because both a personal Gmail and a Workspace account will connect. Complete any homepage, privacy-policy, and authorized-domain fields Google requires before publishing. This installation uses the owner's [public app information and privacy notice](https://gist.github.com/TheMakerOfWorlds/0ea2b4aa332d760f4a08269a8d146196); its source is [docs/public-information.md](docs/public-information.md). The notice contains no mailbox data or credentials. A different owner should publish their own accurate notice and use their own contact information.
 4. Add only `gmail.readonly` and `gmail.send` on the Data Access page.
 5. Set the publishing status to **In production** before issuing durable refresh tokens. External apps left in Testing normally receive seven-day refresh tokens. Publishing status and Google's verification process are separate; [personal-use apps with fewer than 100 users may be exempt from verification](https://support.google.com/cloud/answer/13464323).
 6. Create an OAuth client of type **Desktop app**, named **Email Agent Desktop**. Download its JSON into a private location outside this repository, with file mode 600.

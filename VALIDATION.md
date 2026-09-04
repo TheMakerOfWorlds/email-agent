@@ -13,8 +13,18 @@ The independent client uses Python standard library and macOS Keychain. No gogcl
 - The two requested account-purpose entries were saved in owner-only local configuration outside Git.
 - Synthetic benchmark: 23 discovery tokens, 296 full-skill tokens, zero MCP schemas; ten headers 743 to 521 tokens; a long-message first chunk 21,929 to 739 tokens. The chunk returns 4,000 of 21,400 characters and preserves continuation. These are fixture measurements, not live mail or billing savings.
 
-## Live authentication boundary
+## Live connection verification
 
-The intended personal owner account is signed into Google Cloud. A dedicated Email Agent project was created and Gmail API is enabled. App registration is prepared at the final Google API Services User Data Policy agreement; acceptance is awaiting user confirmation required by the Computer Use tool. OAuth credentials and production publishing status are not configured yet. The two mailbox entries are **configured but not authenticated**. `doctor` correctly reports `Dedicated OAuth client is not configured`.
+The dedicated Google Cloud project has Gmail API enabled, a Desktop OAuth client named Email Agent Desktop, and an External audience. The publishing status was verified as **In production** before either mailbox was connected. Google's unverified-app notice remains for this personal-use application; production status does not imply Google verification.
 
-Real Gmail scopes, OAuth refresh, read access, and message delivery are not yet verified. No real email has been sent. The application verifies refresh and identity automatically when each account completes connection. A real send is deferred until the user requests a message to a specified recipient.
+Both locally configured accounts, `personal` and `work`, are authenticated. For each account:
+
+- The initial token exchange returned exactly `gmail.readonly` and `gmail.send`.
+- The Gmail profile matched the configured email address before the refresh token was stored.
+- Credentials were saved in macOS Keychain, and a real refresh exchange succeeded.
+- Google did not return a fixed refresh-token expiration interval. This does not guarantee perpetual access; Google revocation and policy rules still apply.
+- A fresh process successfully searched for one inbox message and read it through the normal client. The personal result contained 1,214 body characters; the work result contained 1,000. Both stayed within the 4,000-character default, and both search/read results were marked untrusted. No message content was included in the verification report or repository.
+
+The client secret was captured from Google's one-time display directly into Keychain without printing it or placing it in source, command arguments, or a secret file. Account notes remain in owner-only local configuration. The generic public privacy notice required for app branding contains no mailbox data or credentials.
+
+No real email has been sent. Send permission is granted, and native MIME/send behavior is covered by automated tests; actual message delivery remains untested until the user requests a message to a specified recipient.

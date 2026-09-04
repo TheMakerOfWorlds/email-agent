@@ -1,6 +1,6 @@
 # Email Agent
 
-An independent, MIT-licensed Gmail plugin for Codex, owned by [Jackson Stone](https://github.com/TheMakerOfWorlds). No paid email bridge, hosted relay, gogcli runtime, or third-party Python packages. Runtime: Python 3.10+ and macOS Keychain.
+An independent, MIT-licensed Gmail plugin for Codex, owned by [Jackson Stone](https://github.com/TheMakerOfWorlds). No paid email bridge, hosted relay, gogcli runtime, or third-party Python packages. Runtime: Python 3.9+ and macOS Keychain.
 
 Six everyday commands: `accounts`, `senders`, `search`, `read`, `send`, and `status`. The `doctor` command verifies authentication; `scripts/auth.py` handles one-time setup.
 
@@ -52,6 +52,10 @@ python3 scripts/email_agent.py send acme --as team --message /path/to/message.js
 Actual sends require a stable `--request-id`. The local SQLite ledger reserves the ID before contacting Gmail and prevents concurrent or repeated invocation with the same ID. Gmail send POSTs are never automatically retried. A crash or timeout can leave a pending/uncertain outcome; inspect Sent mail before attempting another send. This provides conservative duplicate protection, not a distributed exactly-once guarantee. The ledger stores hashes and compact outcomes, not message bodies.
 
 Plain-text sends, verified sending aliases, Unicode, local attachments, and threaded replies are supported. Alias sends set Reply-To to that alias, and the client checks the actual stored From after Gmail sends. Reply subjects should match the original conversation. Draft requests remain local. Gmail labels/archive/delete, Google-saved drafts, alias creation through the API, attachment downloads, non-Google providers, background sync, and monitoring are not implemented.
+
+## A second Mac
+
+`scripts/sync_remote.py` installs the same reviewed version and account notes on a configured Mac over host-verified SSH. Initial setup can copy only this plugin's existing Gmail grants directly from local Keychain into remote Keychain, without Google sign-in or secret files. Later updates normally reuse the remote credentials. Each deployment verifies the installed version, enabled state, and every mailbox with a fresh process. See [remote setup](setup.md#another-mac-and-later-updates).
 
 ## Development and ownership
 

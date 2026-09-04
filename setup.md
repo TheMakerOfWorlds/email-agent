@@ -1,6 +1,6 @@
 # Setup
 
-Requires Python 3.10+ on macOS. No Python package installation is needed. Use a dedicated Google Cloud project and OAuth client for Email Agent so permission grants remain isolated from other Google tools.
+Requires Python 3.9+ on macOS. No Python package installation is needed. Use a dedicated Google Cloud project and OAuth client for Email Agent so permission grants remain isolated from other Google tools.
 
 ## Google project and desktop client
 
@@ -98,3 +98,29 @@ Send only when the user has authorized the message and recipients. A preview sta
 ## Codex installation
 
 When listed in your personal marketplace, install with `codex plugin add email-agent@personal`. Start a new Codex task after installation or an update so its skill is discovered. Credentials and account notes remain outside the plugin cache.
+
+
+## Another Mac and later updates
+
+The destination must be the user's intended Mac with a known SSH host key, Python 3.9+, Codex CLI, the bundled plugin-creator helper, and an accessible login Keychain. Confirm the exact computer name and remote account home first. Initial setup:
+
+```bash
+python3 scripts/sync_remote.py --host YOUR_SSH_ALIAS --computer-name 'Your Remote Mac' --remote-home /Users/YOUR_USER --copy-credentials
+```
+
+This explicitly copies the configured Gmail client and refresh grants over encrypted, host-verified SSH. Secrets travel through subprocess stdin and memory directly into the destination Keychain, never command arguments, source files, temporary credential files, or output. Only records derived from the configured accounts are read; unrelated Keychain entries are excluded. Both Macs use the same Google grants, so revoking a shared grant affects both copies.
+
+The helper copies committed regular source files into a versioned release under `~/.local/share/email-agent/releases`, points `~/plugins/email-agent` at it, and registers/enables it through Codex's personal marketplace commands. Account notes remain in mode-600 local configuration. A successful initial deployment saves only the SSH target's identity in local `~/.config/email-agent/remote.json`.
+
+After reviewing and committing later changes, update both installations:
+
+```bash
+codex plugin add email-agent@personal
+python3 scripts/sync_remote.py
+```
+
+Normal updates reuse the remote credentials, copy current notes and code, and verify every mailbox through a fresh process. Use `--copy-credentials` again only when authorized to transfer newly connected or replaced Gmail grants. Local source must be clean and committed; remote source/notes edited outside deployment must be reconciled first. Releases are retained for recovery. A failure preserves completed steps, reports its phase without secret output, and can be retried with the same command.
+
+The source machine's compact send history is merged without replacing remote outcomes. This is a snapshot, not a continuously shared ledger: investigate pending/uncertain sends on the original machine, and do not move an unresolved send to the other Mac as a retry. No background timer or email sync loop is installed.
+
+The plugin is enabled at user level on each Mac. Start a new Codex task after installation to load its skill; existing tasks created before installation may need a new task. Ordinary prompts such as “Use Email Agent to check my company mail” can select the skill. Mailbox notes load from local configuration when needed.

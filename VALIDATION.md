@@ -4,7 +4,7 @@ The independent client uses Python standard library and macOS Keychain. No gogcl
 
 ## Completed
 
-- 52 Python tests cover routing, wrong-account blocking, identity-bound references, bounded Unicode reads, HTML conversion, header injection, attachment changes, request reuse/conflict, concurrent sends, and uncertain outcomes. Recipient tests cover addressed aliases versus authenticated mailboxes, repeated delivery headers, forwarding/group context, metadata-only search, visible versus absent Bcc, and bounded routing output.
+- 60 Python tests cover routing, wrong-account blocking, identity-bound references, bounded Unicode reads, HTML conversion, header injection, attachment changes, request reuse/conflict, concurrent sends, and uncertain outcomes. Recipient tests cover addressed aliases versus authenticated mailboxes, repeated delivery headers, forwarding/group context, metadata-only search, visible versus absent Bcc, and bounded routing output.
 - OAuth tests cover exact Gmail-only scopes, PKCE/offline authorization, state validation, wrong-mailbox rejection before storage, refresh verification, cached access, excess-scope rejection on refresh, and foreign client endpoints.
 - Transport tests verify three bounded attempts for transient GET failures, redacted provider errors, and no automatic retry of a send POST.
 - Native MIME tests cover Unicode, To/Bcc/From, reply headers/thread IDs, and attachments. Alias tests cover local allowlists, account-specific selection, live accepted/pending/missing approval, shared-purpose metadata, invalid shared flags, display-name injection, read-only settings access, selected From/Reply-To, actual stored sender verification, and replay protection across aliases.
@@ -50,3 +50,8 @@ The `runs-the-place` account was connected through its dedicated Runs-The-Place 
 The initial exchange granted exactly Gmail read and send scopes. The exact Gmail profile identity was verified before storage in macOS Keychain, and an immediate refresh exchange passed. A fresh process using the installed plugin then verified identity, searched an inbox message, and read a 1,243-character body within the default 4,000-character limit. No message content or new mailbox credentials were included in this report or repository. Account metadata remains outside Git with file mode 600.
 
 All four configured mailboxes are now authenticated. Team and Contact remain shared sending aliases of the DittoDub mailbox, with separate purpose notes and accepted Gmail verification.
+
+
+## Remote deployment checks
+
+Eight deployment tests cover source path traversal, exact credential record selection, mismatched credential identities and excess scopes, derived-key-only export, conservative ledger merging/conflicts, redacted failure output, rejection of a wrong remote computer before credential access, and atomic owner-only account files. These tests use synthetic credentials. Live remote deployment results are recorded after installation succeeds.

@@ -87,6 +87,48 @@ class EmailTests(unittest.TestCase):
         self.assertTrue(result["messages"][0]["unread"])
         self.assertEqual(len(self.backend.calls), 2)
 
+    def test_search_distinguishes_addressed_alias_from_authenticated_mailbox(self):
+        data = {"messages": [{"id": "m1", "to": "team@example.com", "cc": "contact@example.com",
+                "delivery": {"delivered_to": ["work@example.com"]}, "labels": ["UNREAD"]}]}
+        with patch.object(self.backend, "search", return_value=data):
+            result = self.mail.search("work", "to:team@example.com")
+        self.assertEqual(result["mailbox"], "work@example.com")
+        row = result["messages"][0]
+        self.assertEqual(row["to"], "team@example.com")
+        self.assertEqual(row["cc"], "contact@example.com")
+        self.assertEqual(row["delivery"]["delivered_to"], ["work@example.com"])
+        self.assertTrue(result["untrusted"])
+
+    def test_read_exposes_alias_forwarding_and_visible_bcc_without_inference(self):
+        ref = self.mail.reference(self.mail.account("work"), "m1")
+        data = {"message": {"id": "m1"}, "body": "Hello", "headers": {
+            "to": "team@example.com", "cc": "contact@example.com", "bcc": "visible@example.com",
+            "sender": "list-owner@example.com", "reply_to": "team@example.com"},
+            "delivery": {"delivered_to": ["work@example.com", "forwarder@example.net"],
+                         "x_original_to": ["contact@example.com"], "list_id": ["Team <team.example.com>"]}}
+        with patch.object(self.backend, "read", return_value=data):
+            result = self.mail.read(ref)
+        self.assertEqual(result["account"], "work")
+        self.assertEqual(result["mailbox"], "work@example.com")
+        self.assertEqual(result["to"], "team@example.com")
+        self.assertEqual(result["bcc"], "visible@example.com")
+        self.assertEqual(result["sender"], "list-owner@example.com")
+        self.assertEqual(result["delivery"], data["delivery"])
+        self.assertEqual(self.writes(), [])
+        data["headers"].pop("bcc")
+        with patch.object(self.backend, "read", return_value=data):
+            self.assertNotIn("bcc", self.mail.read(ref))
+
+    def test_routing_headers_have_explicit_bounded_output(self):
+        data = {"delivered_to": ["🎸" * 700] * 20, "list_id": ["z" * 5000],
+                "authorization": ["not a routing header"]}
+        for summary, budget in ((False, 3000), (True, 320)):
+            result = ea.delivery_context(data, summary=summary)
+            self.assertTrue(result.pop("truncated"))
+            self.assertNotIn("authorization", result)
+            self.assertLessEqual(sum(len(v.rstrip("…")) for values in result.values() for v in values), budget)
+        self.assertEqual(ea.delivery_context({}), {})
+
     def test_profile_mismatch_blocks_read_and_search(self):
         self.backend.profile_email = "wrong@example.com"
         with self.assertRaises(ea.MailError):

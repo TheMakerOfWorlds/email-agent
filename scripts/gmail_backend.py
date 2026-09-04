@@ -25,6 +25,9 @@ SCOPES = frozenset({"https://www.googleapis.com/auth/gmail.readonly",
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
+DELIVERY_HEADERS = frozenset({"delivered_to", "x_original_to", "x_gm_original_to", "envelope_to",
+    "x_envelope_to", "x_forwarded_to", "x_forwarded_for", "original_recipient", "final_recipient",
+    "resent_to", "resent_cc", "resent_from", "resent_sender", "x_beenthere", "list_id", "list_post"})
 
 
 def b64(data):
@@ -252,8 +255,26 @@ class OAuth:
 
 
 def headers_of(message):
-    return {h["name"].lower().replace("-", "_"): h.get("value", "")
-            for h in message.get("payload", {}).get("headers", [])}
+    result = {}
+    for header in message.get("payload", {}).get("headers", []):
+        name = header["name"].lower().replace("-", "_")
+        value = " ".join(header.get("value", "").split())
+        if name in ("to", "cc", "bcc") and result.get(name):
+            result[name] += ", " + value
+        else:
+            result[name] = value
+    return result
+
+
+def delivery_headers_of(message):
+    """Preserve repeated routing headers in provider order, without inferring aliases."""
+    result = {}
+    for header in message.get("payload", {}).get("headers", []):
+        name = header["name"].lower().replace("-", "_")
+        value = " ".join(header.get("value", "").split())
+        if name in DELIVERY_HEADERS and value:
+            result.setdefault(name, []).append(value)
+    return result
 
 
 class Gmail:
@@ -276,8 +297,10 @@ class Gmail:
         rows = []
         for item in result.get("messages", [])[:limit]:
             message = self.get(account, "/messages/" + item["id"], format="metadata",
-                metadataHeaders=["From", "Subject", "Date"], fields="id,labelIds,payload(headers)")
-            rows.append({"id": message["id"], **headers_of(message), "labels": message.get("labelIds", [])})
+                metadataHeaders=["From", "To", "Cc", "Delivered-To", "Subject", "Date"],
+                fields="id,labelIds,payload(headers)")
+            rows.append({"id": message["id"], **headers_of(message),
+                         "delivery": delivery_headers_of(message), "labels": message.get("labelIds", [])})
         return {"messages": rows, "nextPageToken": result.get("nextPageToken")}
 
     def read(self, account, message_id):
@@ -304,7 +327,7 @@ class Gmail:
             for child in part.get("parts", []):
                 visit(child)
         visit(message.get("payload", {}))
-        return {"message": message, "headers": headers_of(message), "attachments": attachments,
+        return {"message": message, "headers": headers_of(message), "delivery": delivery_headers_of(message), "attachments": attachments,
                 "body": "\n".join(plain or html), "html_only": not plain and bool(html)}
 
     def prepare_send(self, account, payload):

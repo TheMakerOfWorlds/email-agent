@@ -51,6 +51,12 @@ python3 scripts/email_agent.py search personal 'in:inbox' --limit 1
 
 Then read one returned reference from each account to validate message parsing. Access refresh happens automatically during normal commands. If Google revokes a grant or applies an expiry policy, reconnect only the affected account. No periodic consent is intentionally required by this client. [Google's refresh-token expiration rules](https://developers.google.com/identity/protocols/oauth2#expiration).
 
+## Recipients, aliases, and forwarding
+
+Search results include the authenticated `mailbox`, To/Cc, and available Delivered-To values. A full read adds available original-recipient, forwarding, Resent, and mailing-list context in `delivery`; repeated headers remain arrays. It also exposes Sender, Reply-To, and Bcc if Gmail actually includes them. For example, a message can have `to: team@example.com` while `mailbox` and `delivery.delivered_to` show `you@your-company.com`.
+
+Use Gmail searches such as `to:team@example.com`, `cc:contact@example.com`, `deliveredto:you@your-company.com`, or `list:team@example.com`. These are message searches, not alias-directory lookups. Headers can be absent, stripped, or supplied by senders; do not infer unseen Bcc recipients, a complete forwarding route, or permission to send as an alias. The existing Gmail read permission covers this metadata. [Gmail search operators](https://support.google.com/mail/answer/7190), [message metadata API](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/get).
+
 ## Sending
 
 A local JSON file supplies the requested message:

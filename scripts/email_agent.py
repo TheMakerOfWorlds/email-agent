@@ -14,7 +14,7 @@ from html.parser import HTMLParser
 
 
 from mail_errors import MailError
-from gmail_backend import Gmail, SCOPES
+from gmail_backend import Gmail, SCOPES, DELIVERY_HEADERS
 
 
 def compact(value):
@@ -24,6 +24,31 @@ def compact(value):
 def text(value, limit):
     value = str(value or "")
     return value if len(value) <= limit else value[:limit] + "…"
+
+
+def delivery_context(data, *, summary=False):
+    """Bound optional header context and mark every omitted/truncated value."""
+    result, truncated = {}, False
+    budget, per_value, per_header = (320, 160, 2) if summary else (3000, 500, 8)
+    allowed = {"delivered_to"} if summary else DELIVERY_HEADERS
+    for name, values in data.items():
+        if name not in allowed:
+            continue
+        kept = []
+        for index, value in enumerate(values):
+            if index >= per_header or budget <= 0:
+                truncated = True
+                break
+            value = str(value)
+            limit = min(per_value, budget)
+            truncated |= len(value) > limit
+            kept.append(text(value, limit))
+            budget -= min(len(value), limit)
+        if kept:
+            result[name] = kept
+    if truncated:
+        result["truncated"] = True
+    return result
 
 
 def address(value):
@@ -157,11 +182,18 @@ class Mail:
             raise MailError("Unexpected search response shape or result count.")
         rows = []
         for item in items:
-            rows.append({"ref": self.reference(account, item.get("id")),
+            row = {"ref": self.reference(account, item.get("id")),
                          "date": text(item.get("date"), 50), "from": text(item.get("from"), 160),
                          "subject": text(item.get("subject"), 200),
-                         "unread": "UNREAD" in (item.get("labels") or [])})
-        return {"account": account_id, "untrusted": True, "messages": rows,
+                         "unread": "UNREAD" in (item.get("labels") or [])}
+            for name in ("to", "cc"):
+                if item.get(name):
+                    row[name] = text(item[name], 240)
+            delivery = delivery_context(item.get("delivery", {}), summary=True)
+            if delivery:
+                row["delivery"] = delivery
+            rows.append(row)
+        return {"account": account_id, "mailbox": account["email"], "untrusted": True, "messages": rows,
                 "next_cursor": data.get("nextPageToken") or None}
 
     def read(self, ref, offset=0, chars=4000):
@@ -178,8 +210,10 @@ class Mail:
             raise MailError("Unexpected message body or headers.")
         end = min(offset + chars, len(body))
         attachments = data.get("attachments") or []
-        return {"ref": ref, "untrusted": True,
-                **{k: text(headers.get(k), 500) for k in ("from", "to", "cc", "reply_to", "subject", "date") if headers.get(k)},
+        delivery = delivery_context(data.get("delivery", {}))
+        return {"ref": ref, "account": account["id"], "mailbox": account["email"], "untrusted": True,
+                **{k: text(headers.get(k), 500) for k in ("from", "sender", "to", "cc", "bcc", "reply_to", "subject", "date") if headers.get(k)},
+                **({"delivery": delivery} if delivery else {}),
                 "body": body[offset:end], "offset": offset, "total_chars": len(body),
                 "next_offset": end if end < len(body) else None,
                 "attachments": [{"name": text(a.get("filename"), 200), "size": a.get("size")} for a in attachments[:20]],

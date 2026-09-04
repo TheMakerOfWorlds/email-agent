@@ -21,9 +21,12 @@ def count(value):
 body = "Please review the invoice and confirm the delivery date. This paragraph represents ordinary email history.\n" * 200
 search = {"messages": [{"id": f"m{i}", "threadId": f"thread{i}", "date": "2026-09-04 10:00",
                        "internalDateIso": "2026-09-04T10:00:00-06:00", "from": "Vendor <vendor@example.com>",
+                       "to": "Team <team@example.com>", "cc": "Contact <contact@example.com>",
+                       "delivery": {"delivered_to": ["work@example.com"]},
                        "subject": f"Delivery confirmation {i}", "labels": ["INBOX", "UNREAD", "CATEGORY_PRIMARY"]} for i in range(10)],
           "nextPageToken": "next-page-token"}
-message = {"headers": {"from": "vendor@example.com", "to": "work@example.com", "subject": "Delivery confirmation"},
+message = {"headers": {"from": "vendor@example.com", "to": "team@example.com", "cc": "contact@example.com", "subject": "Delivery confirmation"},
+           "delivery": {"delivered_to": ["work@example.com"], "x_original_to": ["team@example.com"]},
            "body": body, "message": {"id": "m0", "threadId": "thread0", "labelIds": ["INBOX", "UNREAD"],
                                       "payload": {"mimeType": "text/plain", "body": {"data": base64.urlsafe_b64encode(body.encode()).decode()}}}}
 

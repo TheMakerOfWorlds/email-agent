@@ -23,9 +23,10 @@ Configure the Google OAuth app as **External / In production** to avoid the seve
 
 ## Small agent context
 
-- Skill-based discovery: 23 tokens of name/description in the current synthetic measurement; the full 296-token instruction loads when relevant. No MCP tool schemas added.
+- Skill-based discovery: 23 tokens of name/description in the current synthetic measurement; the full 354-token instruction loads when relevant. No MCP tool schemas added.
 - Account notes load on demand, without secrets or provider settings.
 - Search retrieves only selected metadata; defaults to 10 results, hard maximum 25, with pagination.
+- Search includes To/Cc and available Delivered-To values. Reads distinguish the authenticated mailbox from recipient aliases and include available forwarding, original-recipient, and mailing-list headers. Repeated delivery headers remain arrays; bounded context reports truncation. Headers do not authorize sending as an alias, and hidden Bcc/stripped routes cannot be inferred.
 - Reads return 4,000 body characters by default, with `next_offset` for continuation. Raw MIME/base64 stays out of the agent response.
 - HTML-only messages become text without fetching remote resources. Attachments are listed as metadata.
 - Output shaping uses local code, with no extra LLM calls.
@@ -46,7 +47,7 @@ python3 scripts/email_agent.py send work --message /path/to/message.json --previ
 
 Actual sends require a stable `--request-id`. The local SQLite ledger reserves the ID before contacting Gmail and prevents concurrent or repeated invocation with the same ID. Gmail send POSTs are never automatically retried. A crash or timeout can leave a pending/uncertain outcome; inspect Sent mail before attempting another send. This provides conservative duplicate protection, not a distributed exactly-once guarantee. The ledger stores hashes and compact outcomes, not message bodies.
 
-Plain-text sends, Unicode, local attachments, and threaded replies are supported. Reply subjects should match the original conversation. Draft requests remain local. Gmail labels/archive/delete, Google-saved drafts, aliases, attachment downloads, non-Google providers, background sync, and monitoring are not implemented.
+Plain-text sends, Unicode, local attachments, and threaded replies are supported. Reply subjects should match the original conversation. Draft requests remain local. Gmail labels/archive/delete, Google-saved drafts, sending as aliases, attachment downloads, non-Google providers, background sync, and monitoring are not implemented.
 
 ## Development and ownership
 

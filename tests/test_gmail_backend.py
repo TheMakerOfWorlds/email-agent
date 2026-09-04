@@ -152,6 +152,42 @@ class GmailTests(unittest.TestCase):
         self.assertEqual(result["body"], "Hello")
         self.assertFalse(result["html_only"])
 
+    def test_forwarding_and_group_headers_preserve_repeated_values(self):
+        self.source["payload"]["headers"] += [
+            {"name": "To", "value": "Team <team@example.com>"},
+            {"name": "tO", "value": "Contact <contact@example.com>"},
+            {"name": "Delivered-To", "value": "work@example.com"},
+            {"name": "delivered-to", "value": "forwarder@example.net"},
+            {"name": "X-Original-To", "value": "contact@example.com"},
+            {"name": "X-BeenThere", "value": "team@example.com"},
+            {"name": "List-Id", "value": "Team\r\n\t<team.example.com>"}]
+        result = self.gmail.read(self.account, "m1")
+        self.assertEqual(result["headers"]["to"], "Team <team@example.com>, Contact <contact@example.com>")
+        self.assertEqual(result["delivery"]["delivered_to"], ["work@example.com", "forwarder@example.net"])
+        self.assertEqual(result["delivery"]["x_original_to"], ["contact@example.com"])
+        self.assertEqual(result["delivery"]["x_beenthere"], ["team@example.com"])
+        self.assertEqual(result["delivery"]["list_id"], ["Team <team.example.com>"])
+        self.assertNotIn("bcc", result["headers"])
+
+    def test_search_fetches_recipient_context_without_body(self):
+        self.source["payload"]["headers"] += [
+            {"name": "To", "value": "team@example.com"},
+            {"name": "Cc", "value": "other@example.com"},
+            {"name": "Delivered-To", "value": "work@example.com"}]
+        def transport(url, **kwargs):
+            self.calls.append((url, kwargs))
+            if urlsplit(url).path == urlsplit(gb.API + "/messages").path:
+                return {"messages": [{"id": "m1"}]}
+            return self.source
+        self.gmail.http = transport
+        result = self.gmail.search(self.account, "to:team@example.com", 1)
+        query = parse_qs(urlsplit(self.calls[-1][0]).query)
+        self.assertEqual(query["format"], ["metadata"])
+        self.assertTrue({"To", "Cc", "Delivered-To"}.issubset(query["metadataHeaders"]))
+        self.assertEqual(result["messages"][0]["to"], "team@example.com")
+        self.assertEqual(result["messages"][0]["delivery"]["delivered_to"], ["work@example.com"])
+        self.assertNotIn("body", result["messages"][0])
+
     def test_html_fallback_ignores_plaintext_attachment(self):
         self.source["payload"] = {"mimeType": "multipart/mixed", "parts": [
             {"mimeType": "text/html", "body": {"data": gb.b64(b"<p>Hi</p>")}},

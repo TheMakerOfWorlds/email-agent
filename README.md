@@ -2,7 +2,7 @@
 
 An independent, MIT-licensed Gmail plugin for Codex, owned by [Jackson Stone](https://github.com/TheMakerOfWorlds). No paid email bridge, hosted relay, gogcli runtime, or third-party Python packages. Runtime: Python 3.10+ and macOS Keychain.
 
-Five everyday commands: `accounts`, `search`, `read`, `send`, and `status`. The `doctor` command verifies authentication; `scripts/auth.py` handles one-time setup.
+Six everyday commands: `accounts`, `senders`, `search`, `read`, `send`, and `status`. The `doctor` command verifies authentication; `scripts/auth.py` handles one-time setup.
 
 ## Gmail-only access
 
@@ -15,6 +15,8 @@ No Drive, Calendar, Contacts, account administration, broad `mail.google.com`, o
 
 Each account has a short ID, an exact email address, and purpose/avoidance notes. Metadata lives in `~/.config/email-agent/accounts.json`, outside this repository. The current Gmail profile is verified before reading or sending; references are bound to the account identity. Cross-account replies and arbitrary From overrides are blocked.
 
+Use company-specific account IDs when operating multiple businesses. The primary mailbox sends by default. Named aliases require both a local allowlist entry and fresh Gmail approval; `--as team` selects one explicitly. Shared aliases carry purpose notes and a `shared` flag because mail and replies can reach other people. The skill reserves them for requested or clearly implied shared correspondence, keeps personal matters in the personal account, and never selects a group sender merely because incoming mail addressed it. Alias lookup uses the existing Gmail read permission; no extra Google access is required.
+
 ## Long-lived authentication
 
 Desktop OAuth uses PKCE S256, random state, and a loopback callback. The dedicated client and refresh tokens live in macOS Keychain; secret values never appear in process arguments or logs. Access tokens are refreshed automatically and cached only in process memory. Connecting verifies both the initial identity and a real refresh exchange.
@@ -23,7 +25,7 @@ Configure the Google OAuth app as **External / In production** to avoid the seve
 
 ## Small agent context
 
-- Skill-based discovery: 23 tokens of name/description in the current synthetic measurement; the full 354-token instruction loads when relevant. No MCP tool schemas added.
+- Skill-based discovery: 23 tokens of name/description in the current synthetic measurement; the full 451-token instruction loads when relevant. No MCP tool schemas added.
 - Account notes load on demand, without secrets or provider settings.
 - Search retrieves only selected metadata; defaults to 10 results, hard maximum 25, with pagination.
 - Search includes To/Cc and available Delivered-To values. Reads distinguish the authenticated mailbox from recipient aliases and include available forwarding, original-recipient, and mailing-list headers. Repeated delivery headers remain arrays; bounded context reports truncation. Headers do not authorize sending as an alias, and hidden Bcc/stripped routes cannot be inferred.
@@ -39,15 +41,17 @@ Follow [setup.md](setup.md), then:
 
 ```bash
 python3 scripts/email_agent.py accounts
-python3 scripts/email_agent.py doctor work
-python3 scripts/email_agent.py search work 'is:unread newer_than:7d'
+python3 scripts/email_agent.py doctor acme
+python3 scripts/email_agent.py senders acme
+python3 scripts/email_agent.py search acme 'is:unread newer_than:7d'
 python3 scripts/email_agent.py read 'REF_RETURNED_BY_SEARCH'
-python3 scripts/email_agent.py send work --message /path/to/message.json --preview
+python3 scripts/email_agent.py send acme --message /path/to/message.json --preview
+python3 scripts/email_agent.py send acme --as team --message /path/to/message.json --preview
 ```
 
 Actual sends require a stable `--request-id`. The local SQLite ledger reserves the ID before contacting Gmail and prevents concurrent or repeated invocation with the same ID. Gmail send POSTs are never automatically retried. A crash or timeout can leave a pending/uncertain outcome; inspect Sent mail before attempting another send. This provides conservative duplicate protection, not a distributed exactly-once guarantee. The ledger stores hashes and compact outcomes, not message bodies.
 
-Plain-text sends, Unicode, local attachments, and threaded replies are supported. Reply subjects should match the original conversation. Draft requests remain local. Gmail labels/archive/delete, Google-saved drafts, sending as aliases, attachment downloads, non-Google providers, background sync, and monitoring are not implemented.
+Plain-text sends, verified sending aliases, Unicode, local attachments, and threaded replies are supported. Alias sends set Reply-To to that alias, and the client checks the actual stored From after Gmail sends. Reply subjects should match the original conversation. Draft requests remain local. Gmail labels/archive/delete, Google-saved drafts, alias creation through the API, attachment downloads, non-Google providers, background sync, and monitoring are not implemented.
 
 ## Development and ownership
 

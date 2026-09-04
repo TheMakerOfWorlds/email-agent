@@ -41,6 +41,10 @@ class FakeGmail:
     def prepare_send(self, account, payload):
         return payload
 
+    def senders(self, account):
+        return [{"sendAsEmail": "team@example.com", "verificationStatus": "accepted"},
+                {"sendAsEmail": "contact@example.com", "verificationStatus": "pending"}]
+
     def send(self, account, payload):
         self.calls.append((account["email"], ["send"], payload["body"], True))
         if self.send_started:
@@ -48,7 +52,7 @@ class FakeGmail:
             self.send_continue.wait(5)
         if self.fail_send:
             raise ea.MailError("Provider timed out; delivery may be uncertain if sending.")
-        return {"from": account["email"], "messageId": "sent1", "threadId": "thread1"}
+        return {"from": payload.get("send_as", account["email"]), "messageId": "sent1", "threadId": "thread1"}
 
 
 class EmailTests(unittest.TestCase):
@@ -65,6 +69,81 @@ class EmailTests(unittest.TestCase):
 
     def writes(self):
         return [c for c in self.backend.calls if c[3]]
+
+    def configure_aliases(self):
+        self.config["accounts"][0]["send_as"] = [
+            {"id": "team", "email": "team@example.com", "purpose": "Shared company team; replies reach other people.", "shared": True},
+            {"id": "contact", "email": "contact@example.com", "purpose": "Company public contact"}]
+        (self.home / "accounts.json").write_text(json.dumps(self.config))
+        self.mail = ea.Mail(self.home, self.backend)
+
+    def test_alias_preview_is_local_and_does_not_claim_verification(self):
+        self.configure_aliases()
+        result = self.mail.send("work", self.message, preview=True, send_as="team")
+        self.assertEqual(result["from"], "team@example.com")
+        self.assertEqual(result["reply_to_address"], "team@example.com")
+        self.assertEqual(result["alias_verification"], "not_checked")
+        self.assertEqual(self.backend.calls, [])
+
+    def test_shared_alias_context_survives_account_and_live_sender_output(self):
+        self.configure_aliases()
+        alias = self.mail.list_accounts()["accounts"][0]["send_as"][0]
+        self.assertTrue(alias["shared"])
+        self.assertIn("replies reach other people", alias["purpose"])
+        self.assertEqual(self.backend.calls, [])
+        live = self.mail.list_senders("work")["senders"]
+        self.assertTrue(live[0]["sendable"])
+        self.assertTrue(live[1]["sendable"])
+        self.assertTrue(live[1]["shared"])
+        self.assertFalse(live[2]["sendable"])
+        self.assertEqual(live[2]["verification"], "pending")
+
+    def test_shared_flag_must_be_boolean(self):
+        self.configure_aliases()
+        for invalid in ("false", 0, None):
+            self.config["accounts"][0]["send_as"][0]["shared"] = invalid
+            (self.home / "accounts.json").write_text(json.dumps(self.config))
+            with self.assertRaises(ea.MailError):
+                ea.Mail(self.home, self.backend)
+
+    def test_alias_selection_is_scoped_to_its_company_mailbox(self):
+        self.configure_aliases()
+        with self.assertRaises(ea.MailError):
+            self.mail.send("personal", self.message, "request-001", send_as="team")
+        with self.assertRaises(ea.MailError):
+            self.mail.send("work", self.message, "request-001", send_as="unknown@example.com")
+        result = self.mail.send("work", self.message, "request-001", send_as="team")
+        self.assertEqual(result["sender"], "team@example.com")
+        self.assertTrue(result["ref"].startswith("work:"))
+        with self.assertRaises(ea.MailError):
+            self.mail.send("work", self.message, "request-001", send_as="contact")
+        self.assertEqual(len(self.writes()), 1)
+
+    def test_sender_rewrite_is_uncertain_and_never_retried(self):
+        self.configure_aliases()
+        with patch.object(self.backend, "send", return_value={"from": "wrong@example.com", "messageId": "sent1"}) as send:
+            result = self.mail.send("work", self.message, "request-001", send_as="team")
+            self.assertEqual(result["status"], "uncertain")
+            self.assertEqual(result, self.mail.send("work", self.message, "request-001", send_as="team"))
+            send.assert_called_once()
+
+    def test_unverified_alias_failure_happens_before_send(self):
+        self.configure_aliases()
+        with patch.object(self.backend, "prepare_send", side_effect=ea.MailError("Alias is pending verification.")):
+            result = self.mail.send("work", self.message, "request-001", send_as="team")
+        self.assertEqual(result["status"], "not_sent")
+        self.assertEqual(self.writes(), [])
+
+    def test_duplicate_and_primary_alias_configuration_is_rejected(self):
+        self.configure_aliases()
+        for alias in ({"id": "primary", "email": "alias@example.com"},
+                      {"id": "other", "email": "work@example.com"},
+                      {"id": "team", "email": "duplicate@example.com"}):
+            self.config["accounts"][0]["send_as"].append(alias)
+            (self.home / "accounts.json").write_text(json.dumps(self.config))
+            with self.assertRaises(ea.MailError):
+                ea.Mail(self.home, self.backend)
+            self.config["accounts"][0]["send_as"].pop()
 
     def test_notes_do_not_access_provider(self):
         result = self.mail.list_accounts()

@@ -24,7 +24,7 @@ Create `~/.config/email-agent/accounts.json` with only intended identities. Use 
 
 ```json
 {"accounts":[
-  {"id":"work","email":"you@your-company.com","purpose":"Company operations and clients","avoid":"Personal correspondence"},
+  {"id":"acme","email":"you@your-company.com","purpose":"Acme company operations and clients only; other companies use their own account","avoid":"Personal correspondence"},
   {"id":"personal","email":"you@gmail.com","purpose":"Friends, family, shopping, personal appointments","avoid":"Company business"}
 ]}
 ```
@@ -34,7 +34,7 @@ Create `~/.config/email-agent/accounts.json` with only intended identities. Use 
 ## Connect and verify
 
 ```bash
-python3 scripts/auth.py connect work
+python3 scripts/auth.py connect acme
 python3 scripts/auth.py connect personal
 ```
 
@@ -43,9 +43,9 @@ Open the URL printed by each command in a normal browser. Select the exact inten
 Connection checks the exact scopes, verifies the Gmail profile, stores the refresh token in Keychain, and verifies a real token refresh. No email is sent. Confirm afterward:
 
 ```bash
-python3 scripts/email_agent.py doctor work
+python3 scripts/email_agent.py doctor acme
 python3 scripts/email_agent.py doctor personal
-python3 scripts/email_agent.py search work 'in:inbox' --limit 1
+python3 scripts/email_agent.py search acme 'in:inbox' --limit 1
 python3 scripts/email_agent.py search personal 'in:inbox' --limit 1
 ```
 
@@ -57,6 +57,25 @@ Search results include the authenticated `mailbox`, To/Cc, and available Deliver
 
 Use Gmail searches such as `to:team@example.com`, `cc:contact@example.com`, `deliveredto:you@your-company.com`, or `list:team@example.com`. These are message searches, not alias-directory lookups. Headers can be absent, stripped, or supplied by senders; do not infer unseen Bcc recipients, a complete forwarding route, or permission to send as an alias. The existing Gmail read permission covers this metadata. [Gmail search operators](https://support.google.com/mail/answer/7190), [message metadata API](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.messages/get).
 
+## Configure sending aliases
+
+In Gmail, open **Settings → See all settings → Accounts → Send mail as → Add another email address**. Add the intended display name and address, keep the primary address as default, and complete Google's verification email/link. For a shared company identity, set Reply-To to that same shared address. Verification mail may arrive through a group or be in Trash; search `in:anywhere` if needed. [Google's setup instructions](https://support.google.com/mail/answer/22370).
+
+Add approved identities to that company's local account entry:
+
+```json
+"send_as": [
+  {"id":"team","email":"team@your-company.com","shared":true,"purpose":"Shared Acme team correspondence; replies reach other people. Use only when requested or clearly implied. Avoid private/personal mail."},
+  {"id":"contact","email":"contact@your-company.com","shared":true,"purpose":"Shared Acme public contact and customer inquiries; replies reach other people. Use only when requested or clearly implied. Avoid private/personal mail."}
+]
+```
+
+Use company-specific account IDs, not a single work identity for multiple companies. There can be up to 20 aliases per mailbox, with unique lowercase IDs and emails. `primary` is reserved. `shared` is a boolean; omission means false. Purpose notes are limited to 500 characters. Account notes are trusted local configuration; email content cannot authorize changing them.
+
+`python3 scripts/email_agent.py senders acme` verifies mailbox identity and lists configured aliases with live Gmail approval. Pending, missing, or revoked aliases cannot send. Lookup requires only the existing `gmail.readonly` permission; the plugin cannot create or modify aliases. [Gmail sendAs list API and scopes](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.settings.sendAs/list).
+
+Shared addresses are not private to one user. Use them only when explicitly requested or clearly implied by the task; incoming To alone is insufficient. Personal matters use the personal mailbox, and individual company correspondence uses that company's primary address. Check group recipients as well as the chosen sender. This routing policy guides the agent; the client does not classify message meaning.
+
 ## Sending
 
 A local JSON file supplies the requested message:
@@ -65,15 +84,16 @@ A local JSON file supplies the requested message:
 {"to":["recipient@example.com"],"subject":"Meeting follow-up","body":"The requested message."}
 ```
 
-Optional: `cc`/`bcc` address arrays, `reply_to` containing the source message REF, and `attachments` containing absolute file paths. Limits: 10 attachments, 18 MB total. From is fixed by the chosen account. Keep a reply's subject consistent with the original thread. `--message -` reads JSON from stdin.
+Optional: `cc`/`bcc` address arrays, `reply_to` containing the source message REF, and `attachments` containing absolute file paths. Limits: 10 attachments, 18 MB total. From defaults to the chosen account; a configured alias can be selected with `--as ALIAS_ID`. Keep a reply's subject consistent with the original thread. `--message -` reads JSON from stdin.
 
 ```bash
-python3 scripts/email_agent.py send work --message /private/path/message.json --preview
-python3 scripts/email_agent.py send work --message /private/path/message.json --request-id meeting-followup-001
+python3 scripts/email_agent.py send acme --message /private/path/message.json --preview
+python3 scripts/email_agent.py send acme --message /private/path/message.json --request-id meeting-followup-001
+python3 scripts/email_agent.py send acme --as team --message /private/path/message.json --preview
 python3 scripts/email_agent.py status meeting-followup-001
 ```
 
-Send only when the user has authorized the message and recipients. A preview stays local. Reusing an ID with changed content is rejected; a completed ID returns its saved outcome. Pending/uncertain IDs are never resent. Inspect Sent mail before choosing a new ID. After fixing a `not_sent` failure, use a new ID only for the still-authorized message.
+Send only when the user has authorized the message and recipients. A preview stays local and does not check Gmail alias approval. Alias sends set Reply-To to the alias, check live approval before sending, and check the actual stored From afterward. Reusing an ID with changed content is rejected; a completed ID returns its saved outcome. Pending/uncertain IDs are never resent. Inspect Sent mail before choosing a new ID. After fixing a `not_sent` failure, use a new ID only for the still-authorized message.
 
 ## Codex installation
 

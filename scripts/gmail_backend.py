@@ -11,7 +11,7 @@ import sys
 import time
 from email.message import EmailMessage, Message
 from email.policy import SMTP
-from email.utils import formatdate, make_msgid
+from email.utils import formataddr, formatdate, make_msgid
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from urllib.error import HTTPError, URLError
@@ -67,7 +67,8 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def http_json(url, *, token=None, payload=None, form=False, retry=False):
-    if not (url == TOKEN_URL or url == API + "/profile" or url.startswith(API + "/messages")):
+    alias_lookup = payload is None and url.split("?", 1)[0] == API + "/settings/sendAs"
+    if not (url == TOKEN_URL or url == API + "/profile" or url.startswith(API + "/messages") or alias_lookup):
         raise MailError("Endpoint outside this plugin's Gmail/OAuth boundary.")
     headers = {"Accept": "application/json"}
     if token:
@@ -289,6 +290,14 @@ class Gmail:
     def profile(self, account):
         return self.get(account, "/profile")
 
+    def senders(self, account):
+        result = self.get(account, "/settings/sendAs",
+                          fields="sendAs(sendAsEmail,displayName,isPrimary,verificationStatus)")
+        rows = result.get("sendAs")
+        if not isinstance(rows, list) or len(rows) > 100 or any(not isinstance(row, dict) for row in rows):
+            raise MailError("Unexpected Gmail sending-address response.")
+        return rows
+
     def search(self, account, query, limit, cursor=None):
         params = {"q": query, "maxResults": limit, "fields": "messages(id),nextPageToken"}
         if cursor:
@@ -333,6 +342,17 @@ class Gmail:
     def prepare_send(self, account, payload):
         message = EmailMessage(policy=SMTP)
         message["From"] = account["email"]
+        if payload.get("send_as"):
+            sender = payload["send_as"]
+            matches = [row for row in self.senders(account)
+                       if str(row.get("sendAsEmail", "")).lower() == sender]
+            if len(matches) != 1 or matches[0].get("verificationStatus") != "accepted":
+                raise MailError("Selected sending alias is not verified by Gmail for this mailbox. No email was sent.")
+            name = matches[0].get("displayName", "")
+            if not isinstance(name, str) or len(name) > 200 or any(ord(c) < 32 or ord(c) == 127 for c in name):
+                raise MailError("Sending alias has an invalid display name.")
+            message.replace_header("From", formataddr((name, sender)))
+            message["Reply-To"] = sender
         for key in ("to", "cc", "bcc"):
             if payload[key]:
                 message[key.title()] = ", ".join(payload[key])
@@ -370,4 +390,11 @@ class Gmail:
     def send(self, account, prepared):
         # Never retry a send POST automatically, including timeouts or 5xx responses.
         result = self.http(API + "/messages/send", token=self.auth.access(account), payload=prepared)
-        return {"from": account["email"], "messageId": result.get("id"), "threadId": result.get("threadId")}
+        message_id = result.get("id")
+        if not isinstance(message_id, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,128}", message_id):
+            raise MailError("Gmail returned no valid sent-message ID; inspect Sent mail before retrying.")
+        sent = self.get(account, "/messages/" + message_id, format="metadata",
+                        metadataHeaders=["From"], fields="id,payload(headers)")
+        if sent.get("id") != message_id:
+            raise MailError("Gmail returned a different sent message; inspect Sent mail before retrying.")
+        return {"from": headers_of(sent).get("from", ""), "messageId": message_id, "threadId": result.get("threadId")}

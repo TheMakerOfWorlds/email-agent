@@ -137,11 +137,18 @@ class GmailTests(unittest.TestCase):
         self.account = {"id": "work", "email": "work@example.com"}
         self.source = {"id": "m1", "threadId": "thread1", "payload": {"mimeType": "text/plain", "body": {"data": gb.b64(b"Hello")},
             "headers": [{"name": "Subject", "value": "Hello"}, {"name": "Message-ID", "value": "<original@example.com>"}]}}
+        self.aliases = [{"sendAsEmail": "team@example.com", "verificationStatus": "accepted", "displayName": "Company Team"}]
 
     def http(self, url, **kwargs):
         self.calls.append((url, kwargs))
         if url.endswith("/send"):
+            mime = message_from_bytes(gb.unb64(kwargs["payload"]["raw"]))
+            self.sent_source = {"id": "sent1", "payload": {"headers": [{"name": "From", "value": mime["From"]}]}}
             return {"id": "sent1", "threadId": "thread1"}
+        if urlsplit(url).path.endswith("/settings/sendAs"):
+            return {"sendAs": self.aliases}
+        if urlsplit(url).path.endswith("/messages/sent1"):
+            return self.sent_source
         return self.source
 
     def payload(self):
@@ -206,8 +213,53 @@ class GmailTests(unittest.TestCase):
         self.assertEqual(message["In-Reply-To"], "<original@example.com>")
         self.assertEqual(prepared["threadId"], "thread1")
         self.assertIn("🎸", message.get_payload(decode=True).decode())
-        self.gmail.send(self.account, prepared)
-        self.assertNotIn("retry", self.calls[-1][1])
+        result = self.gmail.send(self.account, prepared)
+        self.assertEqual(result["from"], self.account["email"])
+        self.assertNotIn("retry", next(kwargs for url, kwargs in self.calls if url.endswith("/send")))
+
+    def test_approved_alias_uses_selected_from_and_reply_address(self):
+        prepared = self.gmail.prepare_send(self.account, {**self.payload(), "send_as": "team@example.com"})
+        message = message_from_bytes(gb.unb64(prepared["raw"]))
+        self.assertEqual(message["From"], "Company Team <team@example.com>")
+        self.assertEqual(message["Reply-To"], "team@example.com")
+        result = self.gmail.send(self.account, prepared)
+        self.assertEqual(result["from"], message["From"])
+        self.assertTrue(urlsplit(self.calls[-1][0]).path.endswith("/messages/sent1"))
+
+    def test_missing_pending_and_revoked_aliases_never_send(self):
+        for rows in ([], [{"sendAsEmail": "team@example.com", "verificationStatus": "pending"}],
+                     [{"sendAsEmail": "team@example.com"}], [{"sendAsEmail": "other@example.com", "verificationStatus": "accepted"}]):
+            self.aliases = rows
+            with self.assertRaises(MailError):
+                self.gmail.prepare_send(self.account, {**self.payload(), "send_as": "team@example.com"})
+        self.assertFalse(any(url.endswith("/send") for url, _ in self.calls))
+
+    def test_alias_display_name_header_injection_is_blocked(self):
+        self.aliases[0]["displayName"] = "Team\r\nBcc: unwanted@example.com"
+        with self.assertRaises(MailError):
+            self.gmail.prepare_send(self.account, {**self.payload(), "send_as": "team@example.com"})
+
+    def test_only_read_only_alias_settings_endpoint_is_allowed(self):
+        with patch.object(gb, "build_opener") as opener:
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value = b'{"sendAs":[]}'
+            self.assertEqual(gb.http_json(gb.API + "/settings/sendAs?fields=sendAs(sendAsEmail)"), {"sendAs": []})
+            for url, options in ((gb.API + "/settings/sendAs", {"payload": {}}),
+                                 (gb.API + "/settings/sendAs/team@example.com", {}),
+                                 (gb.API + "/settings/forwardingAddresses", {})):
+                with self.assertRaises(MailError):
+                    gb.http_json(url, **options)
+            self.assertEqual(opener.return_value.open.call_count, 1)
+
+    def test_send_reports_provider_stored_sender_not_assumed_sender(self):
+        prepared = self.gmail.prepare_send(self.account, self.payload())
+        original = self.gmail.http
+        def transport(url, **kwargs):
+            result = original(url, **kwargs)
+            if url.endswith("/send"):
+                self.sent_source["payload"]["headers"][0]["value"] = "rewritten@example.com"
+            return result
+        self.gmail.http = transport
+        self.assertEqual(self.gmail.send(self.account, prepared)["from"], "rewritten@example.com")
 
     def test_attachment_changed_before_send_is_blocked(self):
         with tempfile.TemporaryDirectory() as directory:

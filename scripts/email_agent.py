@@ -124,7 +124,7 @@ class Mail:
         identities = set()
         for row in rows:
             if not isinstance(row, dict) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", str(row.get("id", ""))):
-                raise MailError("Account IDs must be short lowercase names, such as work.")
+                raise MailError("Account IDs must be short lowercase names, such as acme.")
             row = dict(row, email=address(row.get("email")).lower())
             if row.get("provider", "gmail") not in ("gmail", "google_workspace"):
                 raise MailError("This adapter supports Gmail and Google Workspace mail only.")
@@ -133,6 +133,23 @@ class Mail:
             for key in ("purpose", "avoid"):
                 if not isinstance(row.get(key, ""), str) or len(row.get(key, "")) > 500:
                     raise MailError("Account purpose and avoid notes must be strings of at most 500 characters.")
+            aliases = row.get("send_as", [])
+            if not isinstance(aliases, list) or len(aliases) > 20:
+                raise MailError("Each mailbox may configure at most 20 sending aliases.")
+            alias_ids, alias_emails = {"primary"}, {row["email"]}
+            row["send_as"] = []
+            for alias in aliases:
+                if (not isinstance(alias, dict) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,31}", str(alias.get("id", "")))
+                        or not isinstance(alias.get("purpose", ""), str) or len(alias.get("purpose", "")) > 500
+                        or not isinstance(alias.get("shared", False), bool)):
+                    raise MailError("Sending aliases need a short lowercase ID, email, optional purpose note, and boolean shared flag.")
+                alias = {"id": alias["id"], "email": address(alias.get("email")).lower(),
+                         "purpose": alias.get("purpose", ""), "shared": alias.get("shared", False)}
+                if alias["id"] in alias_ids or alias["email"] in alias_emails:
+                    raise MailError("Duplicate or reserved sending alias identity.")
+                alias_ids.add(alias["id"])
+                alias_emails.add(alias["email"])
+                row["send_as"].append(alias)
             if row["id"] in self.accounts or row["email"] in identities:
                 raise MailError("Duplicate account ID or email address.")
             identities.add(row["email"])
@@ -144,8 +161,19 @@ class Mail:
         return self.accounts[account_id]
 
     def list_accounts(self):
-        rows = [{k: a[k] for k in ("id", "email", "purpose", "avoid") if a.get(k)} for a in self.accounts.values()]
+        rows = [{k: a[k] for k in ("id", "email", "purpose", "avoid", "send_as") if a.get(k)} for a in self.accounts.values()]
         return {"accounts": rows, "authentication": "not_checked", "config": str(self.config)}
+
+    def list_senders(self, account_id):
+        account = self.account(account_id)
+        self.verify(account)
+        approved = self.backend.senders(account)
+        rows = [{"id": "primary", "email": account["email"], "sendable": True}]
+        for alias in account["send_as"]:
+            matches = [row for row in approved if str(row.get("sendAsEmail", "")).lower() == alias["email"]]
+            state = matches[0].get("verificationStatus", "unknown") if len(matches) == 1 else "not_configured"
+            rows.append({**alias, "verification": state, "sendable": state == "accepted"})
+        return {"account": account_id, "mailbox": account["email"], "senders": rows}
 
     @staticmethod
     def identity_key(account):
@@ -219,12 +247,17 @@ class Mail:
                 "attachments": [{"name": text(a.get("filename"), 200), "size": a.get("size")} for a in attachments[:20]],
                 "attachment_count": len(attachments)}
 
-    def prepare(self, account_id, message):
+    def prepare(self, account_id, message, send_as=None):
         account = self.account(account_id)
         allowed = {"to", "cc", "bcc", "subject", "body", "reply_to", "attachments"}
         if not isinstance(message, dict) or set(message) - allowed:
-            raise MailError("Message fields: to, cc, bcc, subject, body, reply_to, attachments. From is fixed by account.")
+            raise MailError("Message fields: to, cc, bcc, subject, body, reply_to, attachments. Select a configured sender with --as.")
         result = {}
+        if send_as is not None:
+            alias = next((row for row in account["send_as"] if row["id"] == send_as), None)
+            if not alias:
+                raise MailError("Unknown sending alias for this mailbox. Run accounts or senders ACCOUNT.")
+            result["send_as"] = alias["email"]
         for key in ("to", "cc", "bcc"):
             rows = message.get(key, [])
             if not isinstance(rows, list) or len(rows) > 50:
@@ -280,10 +313,12 @@ class Mail:
             return {"request_id": request_id, "status": "unknown"}
         return json.loads(row[0])
 
-    def send(self, account_id, message, request_id=None, preview=False):
-        account, payload = self.prepare(account_id, message)
+    def send(self, account_id, message, request_id=None, preview=False, send_as=None):
+        account, payload = self.prepare(account_id, message, send_as)
+        expected_sender = payload.get("send_as", account["email"])
         if preview:
-            return {"status": "preview", "from": account["email"], "to": payload["to"],
+            return {"status": "preview", "from": expected_sender, "to": payload["to"],
+                    **({"reply_to_address": expected_sender, "alias_verification": "not_checked"} if send_as else {}),
                     "cc": payload["cc"], "bcc": payload["bcc"], "subject": payload["subject"],
                     "body_chars": len(payload["body"]), "reply_to": payload.get("reply_to"),
                     "attachments": [Path(a["path"]).name for a in payload["attachments"]]}
@@ -307,7 +342,7 @@ class Mail:
             attempted = True
             data = self.backend.send(account, prepared)
             sender = parseaddr(data.get("from", ""))[1].lower()
-            if sender != account["email"]:
+            if sender != expected_sender:
                 raise MailError("Provider's sender result did not match the intended mailbox; inspect Sent mail.")
             result.update(status="sent", sender=sender, ref=self.reference(account, data.get("messageId")))
         except (MailError, OSError) as exc:
@@ -318,9 +353,11 @@ class Mail:
 
 
 def parser():
-    p = argparse.ArgumentParser(description="Compact Gmail: accounts, search, read, send, status. Setup: doctor.")
+    p = argparse.ArgumentParser(description="Compact Gmail: accounts, senders, search, read, send, status. Setup: doctor.")
     s = p.add_subparsers(dest="command", required=True)
     s.add_parser("accounts", help="List account purpose notes; no authentication or email access.")
+    q = s.add_parser("senders", help="Check configured sending aliases against Gmail's live approved list.")
+    q.add_argument("account")
     q = s.add_parser("search", help="Return headers only; Gmail query syntax.")
     q.add_argument("account"); q.add_argument("query")
     q.add_argument("--limit", type=int, default=10); q.add_argument("--cursor")
@@ -328,6 +365,7 @@ def parser():
     q.add_argument("ref"); q.add_argument("--offset", type=int, default=0); q.add_argument("--chars", type=int, default=4000)
     q = s.add_parser("send", help="Send requested mail; JSON file fields: to[], subject, body; optional cc[], bcc[], reply_to ref, attachments[].")
     q.add_argument("account"); q.add_argument("--message", required=True, help="JSON file path, or - for stdin")
+    q.add_argument("--as", dest="send_as", help="Configured sending alias ID, such as team; defaults to the primary mailbox.")
     q.add_argument("--request-id"); q.add_argument("--preview", action="store_true", help="Validate and show the plan without provider access.")
     q = s.add_parser("status", help="Look up a send request; pending/uncertain requires inspection, never blind retry.")
     q.add_argument("request_id")
@@ -342,6 +380,8 @@ def main():
         mail = Mail()
         if args.command == "accounts":
             result = mail.list_accounts()
+        elif args.command == "senders":
+            result = mail.list_senders(args.account)
         elif args.command == "search":
             result = mail.search(args.account, args.query, args.limit, args.cursor)
         elif args.command == "read":
@@ -352,7 +392,7 @@ def main():
             result = mail.status(args.request_id)
         else:
             message = json.load(sys.stdin) if args.message == "-" else load_json(args.message)
-            result = mail.send(args.account, message, args.request_id, args.preview)
+            result = mail.send(args.account, message, args.request_id, args.preview, args.send_as)
         print(compact(result))
         return 1 if result.get("status") in ("uncertain", "pending", "not_sent") else 0
     except (MailError, ValueError, TypeError, AttributeError, sqlite3.Error, OSError) as exc:

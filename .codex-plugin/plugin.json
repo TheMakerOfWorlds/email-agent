@@ -1,6 +1,6 @@
 {
   "name": "email-agent",
-  "version": "0.1.0+codex.20260904211806",
+  "version": "0.1.0+codex.20260904214322",
   "description": "Compact multi-account Gmail with purpose notes and explicit sender selection.",
   "author": {
     "name": "Jackson Stone",
@@ -19,7 +19,7 @@
     ],
     "defaultPrompt": [
       "Find important unread mail across my accounts.",
-      "Use my work account to reply to this message."
+      "Use the appropriate company account to reply to this message."
     ]
   },
   "license": "MIT",

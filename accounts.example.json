@@ -1,8 +1,38 @@
 {
   "example_only": true,
   "accounts": [
-    {"id": "work", "email": "work@example.com", "purpose": "Clients, company operations, and professional correspondence.", "avoid": "Personal purchases and family mail.", "client": "default"},
-    {"id": "personal", "email": "personal@example.com", "purpose": "Friends, family, appointments, and personal matters.", "avoid": "Client correspondence."},
-    {"id": "shopping", "email": "shopping@example.com", "purpose": "Retail orders, receipts, newsletters, and subscriptions.", "avoid": "Business outreach."}
+    {
+      "id": "acme",
+      "email": "you@acme.example",
+      "purpose": "Acme company operations and clients only. Use each company's own account; personal matters use personal.",
+      "avoid": "Other companies and personal matters. Shared senders require explicit or clearly implied shared correspondence.",
+      "client": "default",
+      "send_as": [
+        {
+          "id": "team",
+          "email": "team@acme.example",
+          "shared": true,
+          "purpose": "Shared Acme team address; replies reach other people. Use only when requested or clearly implied. Avoid private/personal mail."
+        },
+        {
+          "id": "contact",
+          "email": "contact@acme.example",
+          "shared": true,
+          "purpose": "Shared Acme public contact; replies reach other people. Use only when requested or clearly implied. Avoid private/personal mail."
+        }
+      ]
+    },
+    {
+      "id": "personal",
+      "email": "personal@example.com",
+      "purpose": "Friends, family, appointments, and personal matters.",
+      "avoid": "Client correspondence."
+    },
+    {
+      "id": "shopping",
+      "email": "shopping@example.com",
+      "purpose": "Retail orders, receipts, newsletters, and subscriptions.",
+      "avoid": "Business outreach."
+    }
   ]
 }

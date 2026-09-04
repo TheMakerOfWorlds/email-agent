@@ -94,9 +94,9 @@ def main():
         if args.copy_credentials:
             payload["credentials"] = credential_snapshot(list(mail.accounts.values()), OAuth())
         # The bootstrap is public source code. Sensitive payload bytes only enter SSH stdin.
-        receiver = (ROOT / "scripts" / "remote_install.py").read_text()
+        receiver = (ROOT / "scripts" / "remote_session.py").read_text()
         outcome = subprocess.run(ssh + ["python3 -c " + shlex.quote(receiver)],
-                                 input=json.dumps(payload).encode(), capture_output=True, timeout=300)
+                                 input=json.dumps(payload).encode(), capture_output=True, timeout=400)
         try:
             report = json.loads(outcome.stdout)
         except ValueError:

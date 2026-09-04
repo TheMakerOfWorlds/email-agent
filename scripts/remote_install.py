@@ -7,6 +7,7 @@ import os
 from pathlib import Path, PurePosixPath
 import re
 import shutil
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -81,10 +82,10 @@ def atomic_json(path, value):
             os.unlink(name)
 
 
-def main():
+def main(raw=None):
     phase = "input_validation"
     try:
-        raw = sys.stdin.buffer.read(12_000_001)
+        raw = sys.stdin.buffer.read(12_000_001) if raw is None else raw
         if len(raw) > 12_000_000:
             raise ValueError("Input too large")
         payload = json.loads(raw)
@@ -206,11 +207,28 @@ def main():
             result = subprocess.run([sys.executable, str(cache / "scripts/email_agent.py"), "doctor", account["id"]], capture_output=True, timeout=40)
             if result.returncode:
                 raise ValueError("Installed mailbox verification failed")
+        probe = '''import json,sys
+sys.path.insert(0,sys.argv[1])
+from email_agent import Mail
+m=Mail(); rows=[]
+for a in m.accounts.values():
+ s=m.search(a['id'],'in:inbox',1)
+ r=m.read(s['messages'][0]['ref']) if s['messages'] else None
+ item={'id':a['id'],'search_verified':True,'read_verified':r is not None,'read_chars':len(r['body']) if r else 0}
+ if a.get('send_as'):
+  item['aliases']=[{'id':x['id'],'sendable':x['sendable']} for x in m.list_senders(a['id'])['senders']]
+ rows.append(item)
+print(json.dumps(rows))
+'''
+        checks = subprocess.run([sys.executable, "-c", probe, str(cache / "scripts")], capture_output=True, text=True, timeout=90)
+        if checks.returncode:
+            raise ValueError("Installed read checks failed")
+        mail_checks = json.loads(checks.stdout)
         atomic_json(state_path, {"revision": revision, "accounts": incoming,
                                 "source_hashes": {name: hashlib.sha256(content).hexdigest() for name, content in files.items()}})
         print(json.dumps({"status": "ready", "computer": computer, "source": str(source), "version": manifest["version"],
                           "revision": revision, "enabled": True, "accounts": verified, "credentials_copied": copied,
-                          "ledger_records_supplied": len(payload["ledger"])}))
+                          "ledger_records_supplied": len(payload["ledger"]), "mail_checks": mail_checks}))
         return 0
     except Exception:
         print(json.dumps({"status": "failed", "phase": phase}))
@@ -218,4 +236,17 @@ def main():
 
 
 if __name__ == "__main__":
+    if len(sys.argv) == 3 and sys.argv[1] == "--socket":
+        import contextlib
+        import io
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as connection:
+            connection.settimeout(330)
+            connection.connect(sys.argv[2])
+            with connection.makefile("rb") as stream:
+                payload_bytes = stream.read(12_000_001)
+            output = io.StringIO()
+            with contextlib.redirect_stdout(output):
+                code = main(payload_bytes)
+            connection.sendall(output.getvalue().encode())
+        raise SystemExit(code)
     raise SystemExit(main())

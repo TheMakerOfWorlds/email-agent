@@ -184,7 +184,7 @@ class EmailTests(unittest.TestCase):
 
     def test_custom_from_and_header_injection_rejected(self):
         for change in ({"from": "other@example.com"}, {"subject": "Hi\r\nBcc: other@example.com"},
-                       {"to": ["ok@example.com\nBcc:other@example.com"]}):
+                       {"to": ["ok@example.com\nBcc:other@example.com"]}, {"to": ["bad\0@example.com"]}):
             with self.assertRaises(ea.MailError):
                 self.mail.send("work", dict(self.message, **change), "request-001")
         self.assertEqual(self.backend.calls, [])

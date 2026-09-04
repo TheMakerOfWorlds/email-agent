@@ -108,7 +108,7 @@ class AuthTests(unittest.TestCase):
             self.assertEqual(self.store.writes, [])
 
     def test_callback_rejects_missing_wrong_and_duplicate_state(self):
-        for path in ("/callback?code=SECRET", "/callback?state=wrong&code=SECRET",
+        for path in ("/callback?code=SECRET", "/callback?state=🎸&code=SECRET", "/callback?state=wrong&code=SECRET",
                      "/callback?state=correct&state=wrong&code=SECRET", "/elsewhere?state=correct&code=SECRET"):
             with self.assertRaises(MailError):
                 gb.authorization_response(path, "correct")

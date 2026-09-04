@@ -51,7 +51,7 @@ def authorization_response(path, state):
     parsed = urlsplit(path)
     query = parse_qs(parsed.query)
     if (parsed.path != "/callback" or len(query.get("state", [])) != 1
-            or not hmac.compare_digest(query["state"][0], state)):
+            or not hmac.compare_digest(query["state"][0].encode(), state.encode())):
         raise MailError("Invalid authorization response.")
     if len(query.get("code", [])) != 1 or "error" in query:
         return {"error": "Authorization was declined or incomplete."}

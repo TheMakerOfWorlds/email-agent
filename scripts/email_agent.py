@@ -27,7 +27,8 @@ def text(value, limit):
 
 
 def address(value):
-    if not isinstance(value, str) or not re.fullmatch(r"[^\s<>,;@]+@[^\s<>,;@]+\.[^\s<>,;@]+", value):
+    if (not isinstance(value, str) or any(ord(c) < 32 or ord(c) == 127 for c in value)
+            or not re.fullmatch(r"[^\s<>,;@]+@[^\s<>,;@]+\.[^\s<>,;@]+", value)):
         raise MailError("Use a complete, bare email address.")
     return value
 

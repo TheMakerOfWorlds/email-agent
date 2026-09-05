@@ -66,3 +66,12 @@ All 60 tests also passed on the remote Mac's Python 3.9.6. A second deployment w
 All 74 Python tests passed locally. The new tests cover fixed bounded selections, wrong mailbox and missing permission, draft rejection and a draft race, repeated operations, Trash and restore, ambiguous POST outcomes, stopping remaining work, legacy read/send compatibility, and the transport allowlist blocking permanent deletion and unrelated writes. The synthetic benchmark now measures 27 discovery tokens and 576 full-skill tokens; search/read payload sizes are unchanged.
 
 All four mailboxes reconnected with exactly `gmail.modify`. Each connection verified the configured identity and a real refresh exchange, storing renewable grants in macOS Keychain. Google returned no fixed refresh-token expiration interval. The existing DittoDub setup delivery test was moved to Trash and restored; both states were checked, and the original complete label set was restored. No new mail was sent or bulk cleanup performed.
+
+
+## Organization, attachments, and Gmail settings — September 5, 2026
+
+All 100 Python tests pass locally. Added checks cover organization and inverse changes, mailbox-bound selections, label validity/drafts, uncertain writes and batch stops, attachment size and identity, inline and fetched attachment bytes, output path/symlink/overwrite protection, full-query filter criteria, unknown/forwarding action rejection, filter creation replay/concurrency/conflicts, removal backups and absence verification, bounded list output, and empty HTTP 204 filter lists observed from Gmail.
+
+All four configured accounts reconnected with exactly `gmail.modify` and `gmail.settings.basic`, with matching profiles and real refresh verification. All four passed label/filter access checks. A live setup message's inbox, read/unread, star, and importance states were changed and its original label set restored. An inert temporary filter was created, verified, backed up, deleted, and verified absent. A selected existing 1,117,302-byte attachment was downloaded with mode 600, verified by size and SHA-256, then its temporary local copy removed. No new email or lasting saved rule was created.
+
+The synthetic benchmark now measures 28 discovery tokens and 615 full-skill tokens. The longer mailbox command reference loads only for relevant tasks. Search remains 827 tokens for ten fixture headers; the bounded read is 785 tokens, including labels, versus 21,955 for the full fixture.

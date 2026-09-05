@@ -15,6 +15,7 @@ from html.parser import HTMLParser
 
 from mail_errors import MailError
 from gmail_backend import Gmail, SCOPES, DELIVERY_HEADERS
+from mail_features import MailFeatures
 
 
 def compact(value):
@@ -109,7 +110,7 @@ def readable_body(data):
     return body
 
 
-class Mail:
+class Mail(MailFeatures):
     def __init__(self, home=None, backend=None):
         self.home = Path(home or os.environ.get("EMAIL_AGENT_HOME", Path.home() / ".config/email-agent"))
         self.config = self.home / "accounts.json"
@@ -199,7 +200,8 @@ class Mail:
             raise MailError("Authenticated mailbox differs from configured address; operation blocked.")
         scopes = self.backend.permissions(account)
         return {"account": account["id"], "email": account["email"], "authenticated": True, "scopes": sorted(scopes),
-                "cleanup": "https://www.googleapis.com/auth/gmail.modify" in scopes}
+                "cleanup": "https://www.googleapis.com/auth/gmail.modify" in scopes,
+                "settings": "https://www.googleapis.com/auth/gmail.settings.basic" in scopes}
 
     def cleanup(self, account_id, refs, restore=False, preview=False):
         account = self.account(account_id)
@@ -271,6 +273,9 @@ class Mail:
                          "date": text(item.get("date"), 50), "from": text(item.get("from"), 160),
                          "subject": text(item.get("subject"), 200),
                          "unread": "UNREAD" in (item.get("labels") or [])}
+            flags = [v for v in ("STARRED", "IMPORTANT", "TRASH", "SPAM", "DRAFT") if v in (item.get("labels") or [])]
+            if flags:
+                row["flags"] = flags
             for name in ("to", "cc"):
                 if item.get(name):
                     row[name] = text(item[name], 240)
@@ -281,8 +286,8 @@ class Mail:
         return {"account": account_id, "mailbox": account["email"], "untrusted": True, "messages": rows,
                 "next_cursor": data.get("nextPageToken") or None}
 
-    def read(self, ref, offset=0, chars=4000):
-        if offset < 0 or not 1 <= chars <= 12000:
+    def read(self, ref, offset=0, chars=4000, attachment_offset=0):
+        if offset < 0 or attachment_offset < 0 or not 1 <= chars <= 12000:
             raise MailError("Read needs offset >= 0 and chars 1–12000.")
         account, message_id = self.resolve(ref)
         self.verify(account)
@@ -299,9 +304,11 @@ class Mail:
         return {"ref": ref, "account": account["id"], "mailbox": account["email"], "untrusted": True,
                 **{k: text(headers.get(k), 500) for k in ("from", "sender", "to", "cc", "bcc", "reply_to", "subject", "date") if headers.get(k)},
                 **({"delivery": delivery} if delivery else {}),
+                "labels": data.get("message", {}).get("labelIds", []),
                 "body": body[offset:end], "offset": offset, "total_chars": len(body),
                 "next_offset": end if end < len(body) else None,
-                "attachments": [{"name": text(a.get("filename"), 200), "size": a.get("size")} for a in attachments[:20]],
+                "attachments": [{"name": text(a.get("filename"), 200), "size": a.get("size"), "part": a.get("part"), "mime": a.get("mime")} for a in attachments[attachment_offset:attachment_offset + 20]],
+                **({"next_attachment_offset": attachment_offset + 20} if attachment_offset + 20 < len(attachments) else {}),
                 "attachment_count": len(attachments)}
 
     def prepare(self, account_id, message, send_as=None):
@@ -410,7 +417,7 @@ class Mail:
 
 
 def parser():
-    p = argparse.ArgumentParser(description="Compact Gmail: accounts, senders, search, read, send, status, trash, restore. Setup: doctor.")
+    p = argparse.ArgumentParser(description="Account-explicit Gmail: read, send, organize, attachments, saved filters, and cleanup.")
     s = p.add_subparsers(dest="command", required=True)
     s.add_parser("accounts", help="List account purpose notes; no authentication or email access.")
     q = s.add_parser("senders", help="Check configured sending aliases against Gmail's live approved list.")
@@ -420,6 +427,26 @@ def parser():
     q.add_argument("--limit", type=int, default=10); q.add_argument("--cursor")
     q = s.add_parser("read", help="Read a message ref in bounded chunks.")
     q.add_argument("ref"); q.add_argument("--offset", type=int, default=0); q.add_argument("--chars", type=int, default=4000)
+    q.add_argument("--attachment-offset", type=int, default=0)
+    q = s.add_parser("attachment", help="Download one attachment part to a new absolute output filename.")
+    q.add_argument("ref"); q.add_argument("part"); q.add_argument("--output", required=True)
+    q.add_argument("--max-bytes", type=int, default=25000000)
+    q = s.add_parser("organize", help="Apply/remove label IDs on 1–25 explicit messages. Remove INBOX to archive; UNREAD controls read state.")
+    q.add_argument("account"); q.add_argument("refs", nargs="+")
+    q.add_argument("--add", action="append", default=[]); q.add_argument("--remove", action="append", default=[])
+    q.add_argument("--preview", action="store_true")
+    for command in ("labels", "filters"):
+        q = s.add_parser(command, help="List labels or saved filters with bounded output.")
+        q.add_argument("account"); q.add_argument("--contains", default="")
+        q.add_argument("--offset", type=int, default=0); q.add_argument("--limit", type=int, default=20)
+    q = s.add_parser("label-create", help="Create a named Gmail label, with duplicate protection.")
+    q.add_argument("account"); q.add_argument("name"); q.add_argument("--request-id"); q.add_argument("--preview", action="store_true")
+    q = s.add_parser("filter-create", help="Create a Gmail rule from criteria/action JSON for future matching mail.")
+    q.add_argument("account"); q.add_argument("--rule", required=True); q.add_argument("--request-id"); q.add_argument("--preview", action="store_true")
+    q = s.add_parser("filter-delete", help="Back up and remove a saved rule; existing messages stay unchanged.")
+    q.add_argument("account"); q.add_argument("ref"); q.add_argument("--preview", action="store_true")
+    q = s.add_parser("operation-status", help="Check a label/filter creation request; never blindly retry pending/uncertain creation.")
+    q.add_argument("request_id")
     for command in ("trash", "restore"):
         q = s.add_parser(command, help="Move 1–25 explicit message refs to/from Trash; never permanently delete.")
         q.add_argument("account"); q.add_argument("refs", nargs="+")
@@ -446,7 +473,24 @@ def main():
         elif args.command == "search":
             result = mail.search(args.account, args.query, args.limit, args.cursor)
         elif args.command == "read":
-            result = mail.read(args.ref, args.offset, args.chars)
+            result = mail.read(args.ref, args.offset, args.chars, args.attachment_offset)
+        elif args.command == "attachment":
+            result = mail.download(args.ref, args.part, args.output, args.max_bytes)
+        elif args.command == "organize":
+            result = mail.organize(args.account, args.refs, args.add, args.remove, args.preview)
+        elif args.command == "labels":
+            result = mail.list_labels(args.account, args.contains, args.offset, args.limit)
+        elif args.command == "filters":
+            result = mail.list_filters(args.account, args.contains, args.offset, args.limit)
+        elif args.command == "label-create":
+            result = mail.new_label(args.account, args.name, args.request_id, args.preview)
+        elif args.command == "filter-create":
+            rule = json.load(sys.stdin) if args.rule == "-" else load_json(args.rule)
+            result = mail.new_filter(args.account, rule, args.request_id, args.preview)
+        elif args.command == "filter-delete":
+            result = mail.remove_filter(args.account, args.ref, args.preview)
+        elif args.command == "operation-status":
+            result = mail.operation_status(args.request_id)
         elif args.command == "doctor":
             result = mail.verify(mail.account(args.account))
         elif args.command in ("trash", "restore"):
@@ -457,7 +501,7 @@ def main():
             message = json.load(sys.stdin) if args.message == "-" else load_json(args.message)
             result = mail.send(args.account, message, args.request_id, args.preview, args.send_as)
         print(compact(result))
-        return 1 if result.get("status") in ("uncertain", "pending", "not_sent", "partial") else 0
+        return 1 if result.get("status") in ("uncertain", "pending", "not_sent", "partial", "not_created", "not_deleted") else 0
     except (MailError, ValueError, TypeError, AttributeError, sqlite3.Error, OSError) as exc:
         print(compact({"error": str(exc) if isinstance(exc, MailError) else "Invalid input or local storage failure."}))
         return 1

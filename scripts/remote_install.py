@@ -214,7 +214,7 @@ m=Mail(); rows=[]
 for a in m.accounts.values():
  s=m.search(a['id'],'in:inbox',1)
  r=m.read(s['messages'][0]['ref']) if s['messages'] else None
- item={'id':a['id'],'cleanup':m.verify(a)['cleanup'],'search_verified':True,'read_verified':r is not None,'read_chars':len(r['body']) if r else 0}
+ item={'id':a['id'],'cleanup':m.verify(a)['cleanup'],'settings':m.verify(a)['settings'],'filters_verified':isinstance(m.list_filters(a['id'],limit=1)['filters'],list),'labels_verified':isinstance(m.list_labels(a['id'],limit=1)['labels'],list),'search_verified':True,'read_verified':r is not None,'read_chars':len(r['body']) if r else 0}
  if a.get('send_as'):
   item['aliases']=[{'id':x['id'],'sendable':x['sendable']} for x in m.list_senders(a['id'])['senders']]
  rows.append(item)

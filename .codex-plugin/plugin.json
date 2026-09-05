@@ -1,7 +1,7 @@
 {
   "name": "email-agent",
-  "version": "0.1.0+codex.20260905055857",
-  "description": "Compact multi-account Gmail with purpose notes and explicit sender selection.",
+  "version": "0.1.0+codex.20260905062812",
+  "description": "Compact Gmail with account routing, organization, attachments, and filters.",
   "author": {
     "name": "Jackson Stone",
     "url": "https://github.com/TheMakerOfWorlds"
@@ -9,7 +9,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Email Agent",
-    "shortDescription": "Read, send, and clean up Gmail with less context.",
+    "shortDescription": "Read, send, organize, and filter Gmail.",
     "longDescription": "An independent local Gmail client with named accounts, purpose notes, compact results, and Gmail-only OAuth permissions.",
     "developerName": "Jackson Stone",
     "category": "Productivity",

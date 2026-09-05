@@ -23,7 +23,8 @@ from mail_errors import MailError
 LEGACY_SCOPES = frozenset({"https://www.googleapis.com/auth/gmail.readonly",
                            "https://www.googleapis.com/auth/gmail.send"})
 CLEANUP_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
-SCOPES = frozenset({CLEANUP_SCOPE})
+SETTINGS_SCOPE = "https://www.googleapis.com/auth/gmail.settings.basic"
+SCOPES = frozenset({CLEANUP_SCOPE, SETTINGS_SCOPE})
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -48,7 +49,7 @@ def exact_scopes(value):
         raise MailError("Google did not report the granted permissions.")
     actual = set(value.split() if isinstance(value, str) else value)
     if actual != LEGACY_SCOPES and not (CLEANUP_SCOPE in actual and actual <= SCOPES | LEGACY_SCOPES):
-        raise MailError("Permission mismatch: only Gmail modify or legacy Gmail read/send permissions are allowed. Reconnect using this plugin's dedicated OAuth client.")
+        raise MailError("Permission mismatch: only Gmail modify, basic settings, and legacy Gmail read/send permissions are allowed. Reconnect using this plugin's dedicated OAuth client.")
     return sorted(actual)
 
 
@@ -68,13 +69,17 @@ class NoRedirect(HTTPRedirectHandler):
         return None  # Never forward bearer credentials to a redirected endpoint.
 
 
-def http_json(url, *, token=None, payload=None, form=False, retry=False):
+def http_json(url, *, token=None, payload=None, form=False, retry=False, method=None):
     path = url.split("?", 1)[0]
-    read = payload is None and (path in (API + "/profile", API + "/settings/sendAs", API + "/messages")
+    method = method or ("POST" if payload is not None else "GET")
+    resource = re.escape(API) + r"/(?:labels|settings/filters)(?:/[A-Za-z0-9_-]{1,200})?"
+    read = method == "GET" and payload is None and (path in (API + "/profile", API + "/settings/sendAs", API + "/messages")
+        or re.fullmatch(resource, path)
         or re.fullmatch(re.escape(API) + r"/messages/[A-Za-z0-9_-]{1,128}(?:/attachments/[A-Za-z0-9_-]+)?", path))
-    write = payload is not None and (path == API + "/messages/send"
-        or re.fullmatch(re.escape(API) + r"/messages/[A-Za-z0-9_-]{1,128}/(?:trash|untrash)", path))
-    if not (url == TOKEN_URL or read or write):
+    write = method == "POST" and payload is not None and (path in (API + "/messages/send", API + "/labels", API + "/settings/filters")
+        or re.fullmatch(re.escape(API) + r"/messages/[A-Za-z0-9_-]{1,128}/(?:trash|untrash|modify)", path))
+    delete = method == "DELETE" and payload is None and re.fullmatch(re.escape(API) + r"/settings/filters/[A-Za-z0-9_-]{1,200}", path)
+    if not (url == TOKEN_URL and method == "POST" or read or write or delete):
         raise MailError("Endpoint outside this plugin's Gmail/OAuth boundary.")
     headers = {"Accept": "application/json"}
     if token:
@@ -83,14 +88,15 @@ def http_json(url, *, token=None, payload=None, form=False, retry=False):
     if payload is not None:
         data = (urlencode(payload) if form else json.dumps(payload)).encode()
         headers["Content-Type"] = "application/x-www-form-urlencoded" if form else "application/json"
-    attempts = 3 if retry and payload is None else 1
+    attempts = 3 if retry and method == "GET" else 1
     for attempt in range(attempts):
         try:
-            with build_opener(NoRedirect()).open(Request(url, data=data, headers=headers), timeout=45) as response:
+            with build_opener(NoRedirect()).open(Request(url, data=data, headers=headers, method=method), timeout=45) as response:
                 raw = response.read(40_000_001)
+                no_content = response.status == 204
             if len(raw) > 40_000_000:
                 raise MailError("Provider response exceeded the local size limit.")
-            result = json.loads(raw)
+            result = {} if not raw and (no_content or method == "DELETE") else json.loads(raw)
             if not isinstance(result, dict):
                 raise MailError("Unexpected provider response shape.")
             return result
@@ -218,8 +224,8 @@ class OAuth:
         data = self.http(TOKEN_URL, form=True, payload={**client, "code": code, "code_verifier": verifier,
                         "redirect_uri": redirect, "grant_type": "authorization_code"})
         scopes = exact_scopes(data.get("scope"))
-        if CLEANUP_SCOPE not in scopes:
-            raise MailError("Google did not grant Gmail cleanup access. Existing credentials were preserved; reconnect and allow Gmail modify.")
+        if not SCOPES <= set(scopes):
+            raise MailError("Google did not grant the requested Gmail modify and basic settings access. Existing credentials were preserved; reconnect and allow both Gmail permissions.")
         if not data.get("refresh_token") or not data.get("access_token"):
             raise MailError("Google did not grant renewable offline access; reconnect with consent.")
         profile = self.http(API + "/profile", token=data["access_token"], retry=True)
@@ -312,11 +318,49 @@ class Gmail:
             raise MailError("Cleanup needs Gmail modify permission. Run auth.py connect for this account; read/send still work.")
 
     def trash_state(self, account, message_id):
+        labels = self.message_labels(account, message_id)
+        return {"in_trash": "TRASH" in labels, "is_draft": "DRAFT" in labels}
+
+    def message_labels(self, account, message_id):
         value = self.get(account, "/messages/" + message_id, format="minimal", fields="id,labelIds")
-        labels = value.get("labelIds")
+        labels = value.get("labelIds", [])
         if value.get("id") != message_id or not isinstance(labels, list) or any(not isinstance(x, str) for x in labels):
             raise MailError("Gmail returned an invalid message state.")
-        return {"in_trash": "TRASH" in labels, "is_draft": "DRAFT" in labels}
+        return set(labels)
+
+    def modify_labels(self, account, message_id, add, remove):
+        self.require_cleanup(account)
+        return self.http(API + "/messages/" + message_id + "/modify", token=self.auth.access(account),
+                         payload={"addLabelIds": sorted(add), "removeLabelIds": sorted(remove)})
+
+    def labels(self, account):
+        rows = self.get(account, "/labels", fields="labels(id,name,type)").get("labels", [])
+        if not isinstance(rows, list) or len(rows) > 10000 or any(not isinstance(r, dict) or not r.get("id") or not r.get("name") for r in rows):
+            raise MailError("Invalid Gmail label list.")
+        return rows
+
+    def create_label(self, account, name):
+        self.require_cleanup(account)
+        return self.http(API + "/labels", token=self.auth.access(account), payload={"name": name})
+
+    def require_settings(self, account):
+        if SETTINGS_SCOPE not in self.permissions(account):
+            raise MailError("Gmail settings access is missing. Reconnect this account with auth.py connect.")
+
+    def filters(self, account):
+        self.require_settings(account)
+        rows = self.get(account, "/settings/filters").get("filter", [])
+        if not isinstance(rows, list) or len(rows) > 1000 or any(not isinstance(r, dict) or not r.get("id") for r in rows):
+            raise MailError("Invalid Gmail filter list.")
+        return rows
+
+    def create_filter(self, account, rule):
+        self.require_settings(account)
+        return self.http(API + "/settings/filters", token=self.auth.access(account), payload=rule)
+
+    def delete_filter(self, account, filter_id):
+        self.require_settings(account)
+        return self.http(API + "/settings/filters/" + filter_id, token=self.auth.access(account), method="DELETE")
 
     def set_trash(self, account, message_id, trash):
         self.require_cleanup(account)
@@ -335,6 +379,8 @@ class Gmail:
 
     def search(self, account, query, limit, cursor=None):
         params = {"q": query, "maxResults": limit, "fields": "messages(id),nextPageToken"}
+        if re.search(r"\bin:(?:anywhere|spam|trash)\b", query, re.I):
+            params["includeSpamTrash"] = "true"
         if cursor:
             params["pageToken"] = cursor
         result = self.get(account, "/messages", **params)
@@ -357,7 +403,8 @@ class Gmail:
                 if header["name"].lower() in ("content-type", "content-disposition"):
                     meta[header["name"]] = header.get("value", "")
             if part.get("filename") or meta.get_content_disposition() == "attachment":
-                attachments.append({"filename": part.get("filename", "attachment"), "size": body.get("size")})
+                attachments.append({"filename": part.get("filename", "attachment"), "size": body.get("size"),
+                                    "part": "root" if part.get("partId") == "" else part.get("partId"), "mime": mime})
                 return
             if mime in ("text/plain", "text/html"):
                 if body.get("attachmentId"):
@@ -373,6 +420,37 @@ class Gmail:
         visit(message.get("payload", {}))
         return {"message": message, "headers": headers_of(message), "delivery": delivery_headers_of(message), "attachments": attachments,
                 "body": "\n".join(plain or html), "html_only": not plain and bool(html)}
+
+    def attachment(self, account, message_id, part_id, max_bytes):
+        message = self.get(account, "/messages/" + message_id, format="full")
+        if message.get("id") != message_id:
+            raise MailError("Attachment message identity mismatch.")
+        parts = []
+        def visit(part):
+            if ("root" if part.get("partId") == "" else part.get("partId")) == part_id:
+                parts.append(part)
+            for child in part.get("parts", []):
+                visit(child)
+        visit(message.get("payload", {}))
+        if len(parts) != 1:
+            raise MailError("Attachment part is missing or ambiguous; read the message again.")
+        part = parts[0]
+        disposition = next((h.get("value", "") for h in part.get("headers", []) if h.get("name", "").lower() == "content-disposition"), "")
+        if not part.get("filename") and not disposition.lower().startswith("attachment"):
+            raise MailError("The selected part is message content, not an attachment.")
+        body = part.get("body", {})
+        size = body.get("size")
+        if type(size) is not int or not 0 <= size <= max_bytes:
+            raise MailError("Attachment exceeds the download limit or has invalid size.")
+        if body.get("attachmentId"):
+            ident = body["attachmentId"]
+            if not isinstance(ident, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,4096}", ident):
+                raise MailError("Invalid attachment identifier.")
+            body = self.get(account, "/messages/" + message_id + "/attachments/" + ident)
+        raw = unb64(body.get("data", ""))
+        if len(raw) != size or len(raw) > max_bytes:
+            raise MailError("Downloaded attachment size mismatch.")
+        return raw, part.get("filename", "attachment"), part.get("mimeType", "application/octet-stream")
 
     def prepare_send(self, account, payload):
         message = EmailMessage(policy=SMTP)

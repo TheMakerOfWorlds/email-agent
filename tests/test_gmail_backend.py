@@ -179,6 +179,65 @@ class GmailTests(unittest.TestCase):
         self.assertEqual(result["body"], "Hello")
         self.assertFalse(result["html_only"])
 
+    def test_download_inline_and_remote_attachment_bytes(self):
+        self.source["payload"]["parts"] = [{"partId": "1", "filename": "invoice.pdf", "mimeType": "application/pdf",
+            "body": {"size": 3, "data": gb.b64(b"PDF")}}]
+        self.assertEqual(self.gmail.attachment(self.account, "m1", "1", 10)[0], b"PDF")
+        self.source["payload"]["parts"][0]["body"] = {"size": 3, "attachmentId": "remote1"}
+        original = self.gmail.http
+        def transport(url, **kwargs):
+            if "/attachments/remote1" in url:
+                self.calls.append((url, kwargs)); return {"size": 3, "data": gb.b64(b"PDF")}
+            return original(url, **kwargs)
+        self.gmail.http = transport
+        self.assertEqual(self.gmail.attachment(self.account, "m1", "1", 10)[0], b"PDF")
+        self.assertTrue(any("/attachments/remote1" in url for url, _ in self.calls))
+
+    def test_attachment_root_part_and_wrong_message_are_checked(self):
+        self.source["payload"] = {"partId": "", "filename": "file.bin", "body": {"size": 0, "data": ""}}
+        self.assertEqual(self.gmail.attachment(self.account, "m1", "root", 10)[0], b"")
+        with self.assertRaises(MailError): self.gmail.attachment(self.account, "other", "root", 10)
+
+    def test_attachment_oversize_mismatch_and_nonattachment_are_blocked(self):
+        self.source["payload"]["parts"] = [{"partId": "1", "filename": "invoice.pdf", "mimeType": "application/pdf",
+            "body": {"size": 100, "attachmentId": "huge"}}]
+        with self.assertRaises(MailError): self.gmail.attachment(self.account, "m1", "1", 10)
+        self.assertFalse(any("/attachments/huge" in url for url, _ in self.calls))
+        self.source["payload"]["parts"][0]["body"] = {"size": 5, "data": gb.b64(b"PDF")}
+        with self.assertRaises(MailError): self.gmail.attachment(self.account, "m1", "1", 10)
+        self.source["payload"]["parts"][0]["filename"] = ""
+        with self.assertRaises(MailError): self.gmail.attachment(self.account, "m1", "1", 10)
+
+    def test_filter_delete_accepts_empty_response_and_blocks_message_deletion(self):
+        with patch.object(gb, "build_opener") as opener:
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value = b""
+            self.assertEqual(gb.http_json(gb.API + "/settings/filters/f1", method="DELETE"), {})
+            for path in ("/messages/m1", "/messages/batchDelete", "/labels/Label_1", "/settings/forwardingAddresses/f1"):
+                with self.assertRaises(MailError): gb.http_json(gb.API + path, method="DELETE")
+            req = opener.return_value.open.call_args.args[0]
+            self.assertEqual(req.get_method(), "DELETE")
+            self.assertEqual(opener.return_value.open.call_count, 1)
+
+    def test_empty_filter_list_204_is_a_valid_empty_object(self):
+        with patch.object(gb, "build_opener") as opener:
+            response = opener.return_value.open.return_value.__enter__.return_value
+            response.status = 204; response.read.return_value = b""
+            self.assertEqual(gb.http_json(gb.API + "/settings/filters"), {})
+
+    def test_delete_and_modify_requests_are_not_retried(self):
+        for path, kwargs in (("/settings/filters/f1", {"method": "DELETE"}), ("/messages/m1/modify", {"payload": {}})):
+            with patch.object(gb, "build_opener") as opener:
+                opener.return_value.open.side_effect = URLError("SECRET")
+                with self.assertRaises(MailError): gb.http_json(gb.API + path, retry=True, **kwargs)
+                self.assertEqual(opener.return_value.open.call_count, 1)
+
+    def test_search_in_anywhere_enables_spam_trash(self):
+        with patch.object(self.gmail, "get", return_value={}) as get:
+            self.gmail.search(self.account, "in:anywhere filename:pdf", 10)
+            self.assertEqual(get.call_args.kwargs["includeSpamTrash"], "true")
+            self.gmail.search(self.account, "in:inbox", 10)
+            self.assertNotIn("includeSpamTrash", get.call_args.kwargs)
+
     def test_trash_state_requires_matching_id_and_valid_labels(self):
         self.source["labelIds"] = ["SENT", "TRASH"]
         self.assertEqual(self.gmail.trash_state(self.account, "m1"), {"in_trash": True, "is_draft": False})
@@ -208,7 +267,7 @@ class GmailTests(unittest.TestCase):
             opener.return_value.open.return_value.__enter__.return_value.read.return_value = b'{}'
             for route in ("/messages/m1/trash", "/messages/m1/untrash"):
                 gb.http_json(gb.API + route, payload={})
-            for route in ("/messages/m1", "/messages/m1/delete", "/messages/batchDelete", "/messages/modify", "/messages/m1/modify", "/messages", "/drafts"):
+            for route in ("/messages/m1", "/messages/m1/delete", "/messages/batchDelete", "/messages/modify", "/messages", "/drafts"):
                 with self.assertRaises(MailError):
                     gb.http_json(gb.API + route, payload={})
             self.assertEqual(opener.return_value.open.call_count, 2)
@@ -263,7 +322,7 @@ class GmailTests(unittest.TestCase):
         result = self.gmail.read(self.account, "m1")
         self.assertEqual(result["body"], "<p>Hi</p>")
         self.assertTrue(result["html_only"])
-        self.assertEqual(result["attachments"], [{"filename": "note.txt", "size": 3}])
+        self.assertEqual(result["attachments"], [{"filename": "note.txt", "size": 3, "part": None, "mime": "text/plain"}])
 
     def test_mime_from_unicode_recipients_and_threading(self):
         payload = {**self.payload(), "bcc": ["private@example.com"], "reply_to": "work:identity:m1"}

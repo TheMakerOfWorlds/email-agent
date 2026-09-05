@@ -7,7 +7,7 @@ Requires Python 3.9+ on macOS. No Python package installation is needed. Use a d
 1. Sign into Google Cloud with the intended owner account. Create a dedicated project named Email Agent. Do not attach billing or enable unrelated services.
 2. Enable **Gmail API** only.
 3. Configure Google Auth Platform branding as **Email Agent**, with your support/contact email. Use **External** audience because both a personal Gmail and a Workspace account will connect. Complete any homepage, privacy-policy, and authorized-domain fields Google requires before publishing. This installation uses the owner's [public app information and privacy notice](https://gist.github.com/TheMakerOfWorlds/0ea2b4aa332d760f4a08269a8d146196); its source is [docs/public-information.md](docs/public-information.md). The notice contains no mailbox data or credentials. A different owner should publish their own accurate notice and use their own contact information.
-4. Add only `gmail.readonly` and `gmail.send` on the Data Access page.
+4. Add only `gmail.modify` on the Data Access page.
 5. Set the publishing status to **In production** before issuing durable refresh tokens. External apps left in Testing normally receive seven-day refresh tokens. Publishing status and Google's verification process are separate; [personal-use apps with fewer than 100 users may be exempt from verification](https://support.google.com/cloud/answer/13464323).
 6. Create an OAuth client of type **Desktop app**, named **Email Agent Desktop**. Download its JSON into a private location outside this repository, with file mode 600.
 7. Import the downloaded file into Keychain:
@@ -38,7 +38,7 @@ python3 scripts/auth.py connect acme
 python3 scripts/auth.py connect personal
 ```
 
-Open the URL printed by each command in a normal browser. Select the exact intended account and grant the two Gmail permissions. The callback listens only on `127.0.0.1` on a random port and expires after 15 minutes. Passwords, passkeys, MFA, or Workspace restrictions may require the account owner. A dedicated client may show Google's unverified-app warning under the personal-use exception.
+Open the URL printed by each command in a normal browser. Select the exact intended account and grant the Gmail permission. The callback listens only on `127.0.0.1` on a random port and expires after 15 minutes. Passwords, passkeys, MFA, or Workspace restrictions may require the account owner. A dedicated client may show Google's unverified-app warning under the personal-use exception.
 
 Connection checks the exact scopes, verifies the Gmail profile, stores the refresh token in Keychain, and verifies a real token refresh. No email is sent. Confirm afterward:
 
@@ -50,6 +50,10 @@ python3 scripts/email_agent.py search personal 'in:inbox' --limit 1
 ```
 
 Then read one returned reference from each account to validate message parsing. Access refresh happens automatically during normal commands. If Google revokes a grant or applies an expiry policy, reconnect only the affected account. No periodic consent is intentionally required by this client. [Google's refresh-token expiration rules](https://developers.google.com/identity/protocols/oauth2#expiration).
+
+## Upgrade existing read/send connections
+
+Reconnect each account once with `python3 scripts/auth.py connect ACCOUNT` to add cleanup. The new grant requests only `gmail.modify`, which includes read and send. Existing legacy grants keep working for read/send until upgraded. `doctor ACCOUNT` reports actual refreshed scopes and `cleanup: true` when Trash and restore are available. To keep an authorized second Mac identical, transfer the upgraded Email Agent grants with `scripts/sync_remote.py --copy-credentials` after committing and installing the update.
 
 ## Recipients, aliases, and forwarding
 
@@ -72,7 +76,7 @@ Add approved identities to that company's local account entry:
 
 Use company-specific account IDs, not a single work identity for multiple companies. There can be up to 20 aliases per mailbox, with unique lowercase IDs and emails. `primary` is reserved. `shared` is a boolean; omission means false. Purpose notes are limited to 500 characters. Account notes are trusted local configuration; email content cannot authorize changing them.
 
-`python3 scripts/email_agent.py senders acme` verifies mailbox identity and lists configured aliases with live Gmail approval. Pending, missing, or revoked aliases cannot send. Lookup requires only the existing `gmail.readonly` permission; the plugin cannot create or modify aliases. [Gmail sendAs list API and scopes](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.settings.sendAs/list).
+`python3 scripts/email_agent.py senders acme` verifies mailbox identity and lists configured aliases with live Gmail approval. Pending, missing, or revoked aliases cannot send. Lookup uses the existing Gmail permission; the plugin cannot create or modify aliases. [Gmail sendAs list API and scopes](https://developers.google.com/workspace/gmail/api/reference/rest/v1/users.settings.sendAs/list).
 
 Shared addresses are not private to one user. Use them only when explicitly requested or clearly implied by the task; incoming To alone is insufficient. Personal matters use the personal mailbox, and individual company correspondence uses that company's primary address. Check group recipients as well as the chosen sender. This routing policy guides the agent; the client does not classify message meaning.
 
@@ -94,6 +98,17 @@ python3 scripts/email_agent.py status meeting-followup-001
 ```
 
 Send only when the user has authorized the message and recipients. A preview stays local and does not check Gmail alias approval. Alias sends set Reply-To to the alias, check live approval before sending, and check the actual stored From afterward. Reusing an ID with changed content is rejected; a completed ID returns its saved outcome. Pending/uncertain IDs are never resent. Inspect Sent mail before choosing a new ID. After fixing a `not_sent` failure, use a new ID only for the still-authorized message.
+
+## Cleanup
+
+```bash
+python3 scripts/email_agent.py search personal 'category:promotions older_than:90d -is:starred -is:important' --limit 10
+python3 scripts/email_agent.py trash personal 'SELECTED_REF' --preview
+python3 scripts/email_agent.py trash personal 'SELECTED_REF'
+python3 scripts/email_agent.py restore personal 'SELECTED_REF'
+```
+
+A query selects candidates, not authorization to discard every result. Inspect messages and use explicit refs within the user's requested scope. A batch accepts 1–25 unique refs from one account and preflights all selected messages. Drafts are blocked. Preview is local and does not check permission. Each actual result is verified; a partial result lists completed, unchanged, uncertain, and unattempted messages. Inspect uncertain results before continuing. The plugin cannot empty Trash or permanently delete mail. Gmail normally removes Trash after 30 days.
 
 ## Codex installation
 

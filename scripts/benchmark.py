@@ -32,6 +32,8 @@ message = {"headers": {"from": "vendor@example.com", "to": "team@example.com", "
 
 
 class Fixture:
+    def permissions(self, account):
+        return ea.SCOPES
     def profile(self, account):
         return {"emailAddress": account["email"]}
     def search(self, account, query, limit, cursor=None):

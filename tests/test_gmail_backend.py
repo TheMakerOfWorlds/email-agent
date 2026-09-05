@@ -48,7 +48,7 @@ class AuthTests(unittest.TestCase):
     def finish(self):
         return self.auth.finish(self.account, self.client, "CODE", "http://127.0.0.1:1234/callback", "VERIFIER")
 
-    def test_authorization_requests_only_two_scopes_and_offline_pkce(self):
+    def test_authorization_requests_only_gmail_modify_and_offline_pkce(self):
         url = self.auth.authorize_url(self.account, self.client, "http://127.0.0.1:1234/callback", "state", "verifier")
         args = parse_qs(urlsplit(url).query)
         self.assertEqual(set(args["scope"][0].split()), gb.SCOPES)
@@ -58,6 +58,24 @@ class AuthTests(unittest.TestCase):
         self.assertEqual(args["code_challenge_method"], ["S256"])
         self.assertNotIn("CLIENT_SECRET", url)
         self.assertNotEqual(args["code_challenge"], ["verifier"])
+
+    def test_legacy_grants_keep_read_send_but_reconnection_requires_cleanup(self):
+        self.finish()
+        key = self.auth.token_key(self.account, self.client)
+        self.store.records[key]["scopes"] = sorted(gb.LEGACY_SCOPES)
+        self.scope = " ".join(gb.LEGACY_SCOPES)
+        self.auth.cache.clear()
+        self.assertEqual(set(self.auth.permissions(self.account)), gb.LEGACY_SCOPES)
+        saved = dict(self.store.records[key])
+        with self.assertRaises(MailError):
+            self.finish()
+        self.assertEqual(self.store.records[key], saved)
+
+    def test_scope_upgrade_accepts_redundant_gmail_grants_but_never_full_mail(self):
+        self.assertEqual(set(gb.exact_scopes(gb.SCOPES | gb.LEGACY_SCOPES)), gb.SCOPES | gb.LEGACY_SCOPES)
+        for scopes in ({"https://mail.google.com/"}, gb.SCOPES | {"https://mail.google.com/"}, {"openid"} | gb.SCOPES):
+            with self.assertRaises(MailError):
+                gb.exact_scopes(scopes)
 
     def test_excess_or_partial_scopes_never_saved(self):
         for scope in (self.scope + " https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/gmail.readonly", None):
@@ -133,6 +151,8 @@ class GmailTests(unittest.TestCase):
         class Auth:
             def access(self, account):
                 return "TOKEN_SECRET"
+            def permissions(self, account):
+                return gb.SCOPES
         self.gmail = gb.Gmail(Auth(), self.http)
         self.account = {"id": "work", "email": "work@example.com"}
         self.source = {"id": "m1", "threadId": "thread1", "payload": {"mimeType": "text/plain", "body": {"data": gb.b64(b"Hello")},
@@ -158,6 +178,47 @@ class GmailTests(unittest.TestCase):
         result = self.gmail.read(self.account, "m1")
         self.assertEqual(result["body"], "Hello")
         self.assertFalse(result["html_only"])
+
+    def test_trash_state_requires_matching_id_and_valid_labels(self):
+        self.source["labelIds"] = ["SENT", "TRASH"]
+        self.assertEqual(self.gmail.trash_state(self.account, "m1"), {"in_trash": True, "is_draft": False})
+        params = parse_qs(urlsplit(self.calls[-1][0]).query)
+        self.assertEqual(params["format"], ["minimal"])
+        self.assertEqual(params["fields"], ["id,labelIds"])
+        with self.assertRaises(MailError):
+            self.gmail.trash_state(self.account, "other")
+        self.source["labelIds"] = "TRASH"
+        with self.assertRaises(MailError):
+            self.gmail.trash_state(self.account, "m1")
+
+    def test_trash_and_restore_post_once_and_require_permission(self):
+        for target, path in ((True, "trash"), (False, "untrash")):
+            self.gmail.set_trash(self.account, "m1", target)
+            url, options = self.calls[-1]
+            self.assertEqual(url, gb.API + "/messages/m1/" + path)
+            self.assertEqual(options["payload"], {})
+            self.assertNotIn("retry", options)
+        with patch.object(self.gmail.auth, "permissions", return_value=gb.LEGACY_SCOPES):
+            with self.assertRaises(MailError):
+                self.gmail.set_trash(self.account, "m1", True)
+        self.assertEqual(len(self.calls), 2)
+
+    def test_transport_allows_trash_but_blocks_other_mail_mutations(self):
+        with patch.object(gb, "build_opener") as opener:
+            opener.return_value.open.return_value.__enter__.return_value.read.return_value = b'{}'
+            for route in ("/messages/m1/trash", "/messages/m1/untrash"):
+                gb.http_json(gb.API + route, payload={})
+            for route in ("/messages/m1", "/messages/m1/delete", "/messages/batchDelete", "/messages/modify", "/messages/m1/modify", "/messages", "/drafts"):
+                with self.assertRaises(MailError):
+                    gb.http_json(gb.API + route, payload={})
+            self.assertEqual(opener.return_value.open.call_count, 2)
+
+    def test_trash_post_is_not_automatically_retried(self):
+        with patch.object(gb, "build_opener") as opener:
+            opener.return_value.open.side_effect = URLError("SECRET")
+            with self.assertRaises(MailError):
+                gb.http_json(gb.API + "/messages/m1/trash", payload={}, retry=True)
+            self.assertEqual(opener.return_value.open.call_count, 1)
 
     def test_forwarding_and_group_headers_preserve_repeated_values(self):
         self.source["payload"]["headers"] += [

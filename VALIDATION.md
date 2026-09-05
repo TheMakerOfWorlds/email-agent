@@ -59,3 +59,10 @@ Eight deployment tests cover source path traversal, exact credential record sele
 The existing Gmail client and four configured refresh grants were copied directly into remote Keychain. All four exact mailbox identities refreshed successfully. Fresh processes using the installed plugin then searched and read a message from each mailbox, and live sender checks reported both shared aliases accepted. The remote personal marketplace reports Email Agent installed and enabled at the same version as the local Mac; installed file contents match the deployed source.
 
 All 60 tests also passed on the remote Mac's Python 3.9.6. A second deployment without credential copying succeeded and reused remote Keychain records, proving the ordinary update path. The three existing send-ledger records were merged conservatively. All four local accounts were reverified afterward. No new email was sent as part of remote deployment.
+
+
+## Cleanup and restore update — September 4, 2026
+
+All 74 Python tests passed locally. The new tests cover fixed bounded selections, wrong mailbox and missing permission, draft rejection and a draft race, repeated operations, Trash and restore, ambiguous POST outcomes, stopping remaining work, legacy read/send compatibility, and the transport allowlist blocking permanent deletion and unrelated writes. The synthetic benchmark now measures 27 discovery tokens and 576 full-skill tokens; search/read payload sizes are unchanged.
+
+All four mailboxes reconnected with exactly `gmail.modify`. Each connection verified the configured identity and a real refresh exchange, storing renewable grants in macOS Keychain. Google returned no fixed refresh-token expiration interval. The existing DittoDub setup delivery test was moved to Trash and restored; both states were checked, and the original complete label set was restored. No new mail was sent or bulk cleanup performed.

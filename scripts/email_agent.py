@@ -197,7 +197,64 @@ class Mail:
         data = self.backend.profile(account)
         if str(data.get("emailAddress", "")).lower() != account["email"]:
             raise MailError("Authenticated mailbox differs from configured address; operation blocked.")
-        return {"account": account["id"], "email": account["email"], "authenticated": True, "scopes": sorted(SCOPES)}
+        scopes = self.backend.permissions(account)
+        return {"account": account["id"], "email": account["email"], "authenticated": True, "scopes": sorted(scopes),
+                "cleanup": "https://www.googleapis.com/auth/gmail.modify" in scopes}
+
+    def cleanup(self, account_id, refs, restore=False, preview=False):
+        account = self.account(account_id)
+        if not isinstance(refs, list) or not 1 <= len(refs) <= 25 or any(not isinstance(r, str) for r in refs):
+            raise MailError("Cleanup requires 1–25 explicit message refs from one mailbox.")
+        if len(set(refs)) != len(refs):
+            raise MailError("Cleanup refs must be unique.")
+        ids = []
+        for ref in refs:
+            source, message_id = self.resolve(ref)
+            if source["id"] != account_id:
+                raise MailError("Cleanup ref belongs to another mailbox; no messages changed.")
+            ids.append(message_id)
+        operation = "restore" if restore else "trash"
+        if preview:
+            return {"status": "preview", "account": account_id, "mailbox": account["email"], "operation": operation,
+                    "refs": refs, "count": len(refs), "permission": "not_checked", "permanent": False}
+        self.verify(account)
+        self.backend.require_cleanup(account)
+        # Read the entire fixed selection before mutating anything; never delete by a moving query/page.
+        states = [self.backend.trash_state(account, message_id) for message_id in ids]
+        if any(s["is_draft"] for s in states):
+            raise MailError("Cleanup does not operate on drafts; no messages changed.")
+        target = not restore
+        outcomes, stopped = [], False
+        for ref, message_id in zip(refs, ids):
+            if stopped:
+                outcomes.append({"ref": ref, "status": "not_attempted"})
+                continue
+            attempted = False
+            try:
+                current = self.backend.trash_state(account, message_id)
+                if current["is_draft"]:
+                    raise MailError("Message became a draft; cleanup stopped.")
+                if current["in_trash"] == target:
+                    outcomes.append({"ref": ref, "status": "unchanged", "in_trash": target})
+                    continue
+                attempted = True
+                self.backend.set_trash(account, message_id, target)
+                current = self.backend.trash_state(account, message_id)
+                if current["in_trash"] != target:
+                    raise MailError("Gmail did not show the requested Trash state.")
+                outcomes.append({"ref": ref, "status": "restored" if restore else "trashed", "in_trash": target})
+            except (MailError, OSError):
+                # An error may follow a successful POST. Inspect before any later retry.
+                try:
+                    current = self.backend.trash_state(account, message_id)
+                    status = "verified_after_error" if attempted and current["in_trash"] == target else "not_changed"
+                    outcomes.append({"ref": ref, "status": status, "in_trash": current["in_trash"]})
+                    stopped = status != "verified_after_error"
+                except (MailError, OSError):
+                    outcomes.append({"ref": ref, "status": "uncertain" if attempted else "not_changed"})
+                    stopped = True
+        return {"status": "partial" if stopped else "complete", "account": account_id, "operation": operation,
+                "permanent": False, "messages": outcomes}
 
     def search(self, account_id, query, limit=10, cursor=None):
         if not query.strip() or len(query) > 2000 or not 1 <= limit <= 25:
@@ -353,7 +410,7 @@ class Mail:
 
 
 def parser():
-    p = argparse.ArgumentParser(description="Compact Gmail: accounts, senders, search, read, send, status. Setup: doctor.")
+    p = argparse.ArgumentParser(description="Compact Gmail: accounts, senders, search, read, send, status, trash, restore. Setup: doctor.")
     s = p.add_subparsers(dest="command", required=True)
     s.add_parser("accounts", help="List account purpose notes; no authentication or email access.")
     q = s.add_parser("senders", help="Check configured sending aliases against Gmail's live approved list.")
@@ -363,6 +420,10 @@ def parser():
     q.add_argument("--limit", type=int, default=10); q.add_argument("--cursor")
     q = s.add_parser("read", help="Read a message ref in bounded chunks.")
     q.add_argument("ref"); q.add_argument("--offset", type=int, default=0); q.add_argument("--chars", type=int, default=4000)
+    for command in ("trash", "restore"):
+        q = s.add_parser(command, help="Move 1–25 explicit message refs to/from Trash; never permanently delete.")
+        q.add_argument("account"); q.add_argument("refs", nargs="+")
+        q.add_argument("--preview", action="store_true", help="Show the selected refs without provider access.")
     q = s.add_parser("send", help="Send requested mail; JSON file fields: to[], subject, body; optional cc[], bcc[], reply_to ref, attachments[].")
     q.add_argument("account"); q.add_argument("--message", required=True, help="JSON file path, or - for stdin")
     q.add_argument("--as", dest="send_as", help="Configured sending alias ID, such as team; defaults to the primary mailbox.")
@@ -388,13 +449,15 @@ def main():
             result = mail.read(args.ref, args.offset, args.chars)
         elif args.command == "doctor":
             result = mail.verify(mail.account(args.account))
+        elif args.command in ("trash", "restore"):
+            result = mail.cleanup(args.account, args.refs, args.command == "restore", args.preview)
         elif args.command == "status":
             result = mail.status(args.request_id)
         else:
             message = json.load(sys.stdin) if args.message == "-" else load_json(args.message)
             result = mail.send(args.account, message, args.request_id, args.preview, args.send_as)
         print(compact(result))
-        return 1 if result.get("status") in ("uncertain", "pending", "not_sent") else 0
+        return 1 if result.get("status") in ("uncertain", "pending", "not_sent", "partial") else 0
     except (MailError, ValueError, TypeError, AttributeError, sqlite3.Error, OSError) as exc:
         print(compact({"error": str(exc) if isinstance(exc, MailError) else "Invalid input or local storage failure."}))
         return 1

@@ -23,10 +23,27 @@ class FakeGmail:
         self.body = "A useful message.\n" + "Long quoted history.\n" * 1000
         self.send_started = None
         self.send_continue = None
+        self.scopes = ea.SCOPES
+        self.trash = {}
+        self.drafts = set()
 
     def profile(self, account):
         self.calls.append((account["email"], ["profile"], None, False))
         return {"emailAddress": self.profile_email or account["email"]}
+
+    def permissions(self, account):
+        return self.scopes
+
+    def require_cleanup(self, account):
+        if "https://www.googleapis.com/auth/gmail.modify" not in self.scopes:
+            raise ea.MailError("Cleanup permission is missing.")
+
+    def trash_state(self, account, message_id):
+        return {"in_trash": self.trash.get(message_id, False), "is_draft": message_id in self.drafts}
+
+    def set_trash(self, account, message_id, trash):
+        self.calls.append((account["email"], ["trash" if trash else "restore", message_id], None, True))
+        self.trash[message_id] = trash
 
     def search(self, account, query, limit, cursor=None):
         self.calls.append((account["email"], ["search", query, limit, cursor], None, False))
@@ -69,6 +86,84 @@ class EmailTests(unittest.TestCase):
 
     def writes(self):
         return [c for c in self.backend.calls if c[3]]
+
+    def refs(self, *ids):
+        return [self.mail.reference(self.mail.account("work"), value) for value in ids]
+
+    def test_cleanup_preview_is_local(self):
+        result = self.mail.cleanup("work", self.refs("m1"), preview=True)
+        self.assertEqual(result["permission"], "not_checked")
+        self.assertFalse(result["permanent"])
+        self.assertEqual(self.backend.calls, [])
+
+    def test_cleanup_rejects_mixed_duplicate_and_unbounded_selection(self):
+        other = self.mail.reference(self.mail.account("personal"), "m2")
+        for refs in ([], self.refs("m1", "m1"), self.refs("m1") + [other], self.refs(*[str(i) for i in range(26)])):
+            with self.assertRaises(ea.MailError):
+                self.mail.cleanup("work", refs)
+        self.assertEqual(self.backend.calls, [])
+
+    def test_cleanup_rejects_wrong_identity_missing_permission_and_drafts_before_any_write(self):
+        self.backend.profile_email = "wrong@example.com"
+        with self.assertRaises(ea.MailError):
+            self.mail.cleanup("work", self.refs("m1"))
+        self.backend.profile_email = None
+        self.backend.scopes = {"https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send"}
+        self.assertFalse(self.mail.verify(self.mail.account("work"))["cleanup"])
+        with self.assertRaises(ea.MailError):
+            self.mail.cleanup("work", self.refs("m1"))
+        self.backend.scopes = ea.SCOPES
+        self.backend.drafts.add("m2")
+        with self.assertRaises(ea.MailError):
+            self.mail.cleanup("work", self.refs("m1", "m2"))
+        self.assertEqual(self.writes(), [])
+
+    def test_trash_restore_and_retries_skip_already_matching_state(self):
+        refs = self.refs("m1", "m2")
+        for restore, expected in ((False, "trashed"), (True, "restored")):
+            result = self.mail.cleanup("work", refs, restore=restore)
+            self.assertEqual(result["status"], "complete")
+            self.assertEqual([m["status"] for m in result["messages"]], [expected] * 2)
+            count = len(self.writes())
+            result = self.mail.cleanup("work", refs, restore=restore)
+            self.assertEqual([m["status"] for m in result["messages"]], ["unchanged"] * 2)
+            self.assertEqual(len(self.writes()), count)
+        self.assertFalse(any(self.backend.trash.values()))
+
+    def test_cleanup_verifies_success_after_post_timeout_without_duplicate_write(self):
+        original = self.backend.set_trash
+        def timeout(*args):
+            original(*args)
+            raise ea.MailError("Timeout")
+        with patch.object(self.backend, "set_trash", side_effect=timeout):
+            result = self.mail.cleanup("work", self.refs("m1", "m2"))
+        self.assertEqual(result["status"], "complete")
+        self.assertEqual([m["status"] for m in result["messages"]], ["verified_after_error"] * 2)
+        self.assertEqual(len(self.writes()), 2)
+
+    def test_cleanup_stops_batch_when_write_did_not_change_state(self):
+        with patch.object(self.backend, "set_trash", side_effect=ea.MailError("Failed")) as write:
+            result = self.mail.cleanup("work", self.refs("m1", "m2"))
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual([m["status"] for m in result["messages"]], ["not_changed", "not_attempted"])
+        write.assert_called_once()
+
+    def test_cleanup_ambiguous_post_and_failed_read_stop_remaining_batch(self):
+        state = {"in_trash": False, "is_draft": False}
+        with patch.object(self.backend, "trash_state", side_effect=[state, state, state, ea.MailError("Offline")]), \
+                patch.object(self.backend, "set_trash", side_effect=ea.MailError("Timeout")) as write:
+            result = self.mail.cleanup("work", self.refs("m1", "m2"))
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual([m["status"] for m in result["messages"]], ["uncertain", "not_attempted"])
+        write.assert_called_once()
+
+    def test_cleanup_draft_race_stops_without_claiming_success(self):
+        before = {"in_trash": False, "is_draft": False}
+        after = {"in_trash": False, "is_draft": True}
+        with patch.object(self.backend, "trash_state", side_effect=[before, after, after]):
+            result = self.mail.cleanup("work", self.refs("m1"), restore=True)
+        self.assertEqual(result["status"], "partial")
+        self.assertEqual(self.writes(), [])
 
     def configure_aliases(self):
         self.config["accounts"][0]["send_as"] = [

@@ -1,6 +1,6 @@
 {
   "name": "email-agent",
-  "version": "0.1.0+codex.20260904223050",
+  "version": "0.1.0+codex.20260905055857",
   "description": "Compact multi-account Gmail with purpose notes and explicit sender selection.",
   "author": {
     "name": "Jackson Stone",
@@ -9,7 +9,7 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "Email Agent",
-    "shortDescription": "Read and send Gmail with less context.",
+    "shortDescription": "Read, send, and clean up Gmail with less context.",
     "longDescription": "An independent local Gmail client with named accounts, purpose notes, compact results, and Gmail-only OAuth permissions.",
     "developerName": "Jackson Stone",
     "category": "Productivity",

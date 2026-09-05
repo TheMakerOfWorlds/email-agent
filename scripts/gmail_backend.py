@@ -20,8 +20,10 @@ from urllib.request import Request, build_opener, HTTPRedirectHandler
 
 from mail_errors import MailError
 
-SCOPES = frozenset({"https://www.googleapis.com/auth/gmail.readonly",
-                    "https://www.googleapis.com/auth/gmail.send"})
+LEGACY_SCOPES = frozenset({"https://www.googleapis.com/auth/gmail.readonly",
+                           "https://www.googleapis.com/auth/gmail.send"})
+CLEANUP_SCOPE = "https://www.googleapis.com/auth/gmail.modify"
+SCOPES = frozenset({CLEANUP_SCOPE})
 API = "https://gmail.googleapis.com/gmail/v1/users/me"
 TOKEN_URL = "https://oauth2.googleapis.com/token"
 AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth"
@@ -45,8 +47,8 @@ def exact_scopes(value):
     if not isinstance(value, (str, list, tuple, set, frozenset)):
         raise MailError("Google did not report the granted permissions.")
     actual = set(value.split() if isinstance(value, str) else value)
-    if actual != SCOPES:
-        raise MailError("Permission mismatch: this plugin requires exactly Gmail read and send. Reconnect using its dedicated OAuth client.")
+    if actual != LEGACY_SCOPES and not (CLEANUP_SCOPE in actual and actual <= SCOPES | LEGACY_SCOPES):
+        raise MailError("Permission mismatch: only Gmail modify or legacy Gmail read/send permissions are allowed. Reconnect using this plugin's dedicated OAuth client.")
     return sorted(actual)
 
 
@@ -67,8 +69,12 @@ class NoRedirect(HTTPRedirectHandler):
 
 
 def http_json(url, *, token=None, payload=None, form=False, retry=False):
-    alias_lookup = payload is None and url.split("?", 1)[0] == API + "/settings/sendAs"
-    if not (url == TOKEN_URL or url == API + "/profile" or url.startswith(API + "/messages") or alias_lookup):
+    path = url.split("?", 1)[0]
+    read = payload is None and (path in (API + "/profile", API + "/settings/sendAs", API + "/messages")
+        or re.fullmatch(re.escape(API) + r"/messages/[A-Za-z0-9_-]{1,128}(?:/attachments/[A-Za-z0-9_-]+)?", path))
+    write = payload is not None and (path == API + "/messages/send"
+        or re.fullmatch(re.escape(API) + r"/messages/[A-Za-z0-9_-]{1,128}/(?:trash|untrash)", path))
+    if not (url == TOKEN_URL or read or write):
         raise MailError("Endpoint outside this plugin's Gmail/OAuth boundary.")
     headers = {"Accept": "application/json"}
     if token:
@@ -151,6 +157,7 @@ class OAuth:
         self.store = store or Keychain()
         self.http = transport or http_json
         self.cache = {}
+        self.scope_cache = {}
 
     def import_client(self, path, name="default"):
         try:
@@ -187,14 +194,19 @@ class OAuth:
             raise MailError("Stored credential identity does not match the requested account.")
         exact_scopes(saved.get("scopes"))
         fresh = self.http(TOKEN_URL, form=True, payload={**client, "grant_type": "refresh_token", "refresh_token": saved["refresh_token"]})
-        exact_scopes(fresh.get("scope", saved["scopes"]))
+        scopes = exact_scopes(fresh.get("scope", saved["scopes"]))
         token = fresh.get("access_token")
         if not isinstance(token, str) or not token:
             raise MailError("Google returned no usable access token.")
         if fresh.get("refresh_token") and fresh["refresh_token"] != saved["refresh_token"]:
             self.store.put(key, {**saved, "refresh_token": fresh["refresh_token"]})
         self.cache[key] = (token, time.time() + int(fresh.get("expires_in", 3600)))
+        self.scope_cache[key] = scopes
         return token
+
+    def permissions(self, account):
+        self.access(account)
+        return self.scope_cache[self.token_key(account, self.client(account))]
 
     def authorize_url(self, account, client, redirect, state, verifier):
         return AUTH_URL + "?" + urlencode({"client_id": client["client_id"], "redirect_uri": redirect,
@@ -206,6 +218,8 @@ class OAuth:
         data = self.http(TOKEN_URL, form=True, payload={**client, "code": code, "code_verifier": verifier,
                         "redirect_uri": redirect, "grant_type": "authorization_code"})
         scopes = exact_scopes(data.get("scope"))
+        if CLEANUP_SCOPE not in scopes:
+            raise MailError("Google did not grant Gmail cleanup access. Existing credentials were preserved; reconnect and allow Gmail modify.")
         if not data.get("refresh_token") or not data.get("access_token"):
             raise MailError("Google did not grant renewable offline access; reconnect with consent.")
         profile = self.http(API + "/profile", token=data["access_token"], retry=True)
@@ -289,6 +303,27 @@ class Gmail:
 
     def profile(self, account):
         return self.get(account, "/profile")
+
+    def permissions(self, account):
+        return self.auth.permissions(account)
+
+    def require_cleanup(self, account):
+        if CLEANUP_SCOPE not in self.permissions(account):
+            raise MailError("Cleanup needs Gmail modify permission. Run auth.py connect for this account; read/send still work.")
+
+    def trash_state(self, account, message_id):
+        value = self.get(account, "/messages/" + message_id, format="minimal", fields="id,labelIds")
+        labels = value.get("labelIds")
+        if value.get("id") != message_id or not isinstance(labels, list) or any(not isinstance(x, str) for x in labels):
+            raise MailError("Gmail returned an invalid message state.")
+        return {"in_trash": "TRASH" in labels, "is_draft": "DRAFT" in labels}
+
+    def set_trash(self, account, message_id, trash):
+        self.require_cleanup(account)
+        operation = "trash" if trash else "untrash"
+        # No write retries. The caller checks provider state after an ambiguous result.
+        return self.http(API + "/messages/" + message_id + "/" + operation,
+                         token=self.auth.access(account), payload={})
 
     def senders(self, account):
         result = self.get(account, "/settings/sendAs",

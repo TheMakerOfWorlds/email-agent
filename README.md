@@ -4,6 +4,23 @@ An independent, MIT-licensed Gmail plugin for Codex, owned by [Jackson Stone](ht
 
 Read, search, send, organize, download attachments, and manage saved Gmail filters through compact account-explicit commands. `doctor` verifies mailbox identity and granted permissions; `scripts/auth.py` handles one-time setup.
 
+## Set up your own installation
+
+**Start with the [complete setup guide](setup.md).** It takes you from a fresh clone through creating your own Google Cloud project and desktop OAuth app, connecting your mailboxes, installing in Codex, checking delivery, and optionally setting up a second Mac.
+
+Every owner supplies their own Google app and credentials. The repository maintainer receives no mailbox access from your installation. Your OAuth app being **In production** does not publish your credentials or email. Google still processes Gmail data, and mail returned to your agent is processed by your configured AI service; see [ownership, storage, and access boundaries](docs/security.md).
+
+- [Prerequisites and clone](setup.md#before-you-start)
+- [Create your Google app](setup.md#google-project-and-desktop-client)
+- [Example account configuration](examples/accounts.example.json) — fictional identities; edit your private copy
+- [Install the plugin in Codex](setup.md#codex-installation)
+- [Verify the complete setup](setup.md#verify-your-complete-setup)
+- [Second Mac and updates](setup.md#another-mac-and-later-updates)
+- [Troubleshooting](setup.md#troubleshooting)
+- [Privacy-notice template for your own app](docs/privacy-notice-template.md)
+
+This setup currently requires macOS Keychain. It needs no paid email bridge or hosted relay; Codex/AI service access and any existing Google Workspace subscription are separate. Calendar, Drive, Docs, Sheets, Contacts, Tasks, and Meet are not implemented or authorized by this setup.
+
 ## Gmail-only access
 
 New connections request two Gmail permissions:
@@ -83,4 +100,4 @@ The repository owns the Gmail, OAuth, MIME, routing, and output code. It does no
 
 Optional development tools are PyYAML for Codex validators and tiktoken for the benchmark. They are not runtime dependencies. See [VALIDATION.md](VALIDATION.md) for tested behavior and remaining live checks.
 
-Google's consent screen links to the owner's [public app information and privacy notice](https://gist.github.com/TheMakerOfWorlds/0ea2b4aa332d760f4a08269a8d146196). Its [source](docs/public-information.md) is maintained here. The notice is public; private account configuration and credentials are not part of the repository or plugin package.
+The maintainer's consent screen links to the maintainer's [public app information and privacy notice](https://gist.github.com/TheMakerOfWorlds/0ea2b4aa332d760f4a08269a8d146196), maintained in [source](docs/public-information.md). It describes that installation. For your own app, use your own contact information and [adapt the template](docs/privacy-notice-template.md). Public app information must never contain private account configuration or credentials.

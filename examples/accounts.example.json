@@ -1,0 +1,42 @@
+{
+  "accounts": [
+    {
+      "id": "acme",
+      "email": "you@acme.example",
+      "purpose": "Acme company operations and individual client correspondence. Other businesses use their own account.",
+      "avoid": "Personal matters, other companies, and unrelated development identities.",
+      "send_as": [
+        {
+          "id": "team",
+          "email": "team@acme.example",
+          "shared": true,
+          "purpose": "Shared Acme team correspondence. Mail and replies reach other people. Use only when requested or clearly implied; never for private individual matters."
+        },
+        {
+          "id": "contact",
+          "email": "contact@acme.example",
+          "shared": true,
+          "purpose": "Shared Acme customer inquiries. Replies reach the group. Use only for intended shared company correspondence."
+        }
+      ]
+    },
+    {
+      "id": "personal",
+      "email": "you@personal.example",
+      "purpose": "Friends, family, shopping, and personal appointments.",
+      "avoid": "Company correspondence and public shared identities."
+    },
+    {
+      "id": "secondary",
+      "email": "you@secondary.example",
+      "purpose": "Secondary identity for one-off services and personal development accounts.",
+      "avoid": "Linking this identity to my primary personal or company identities without instruction."
+    },
+    {
+      "id": "other-company",
+      "email": "you@other-company.example",
+      "purpose": "Other Company operations and business correspondence only.",
+      "avoid": "Acme business, personal correspondence, and unrelated development."
+    }
+  ]
+}

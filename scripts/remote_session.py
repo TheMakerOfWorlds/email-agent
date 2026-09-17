@@ -53,7 +53,7 @@ def main():
                 finally:
                     subprocess.run(["/bin/launchctl", "bootout", domain + "/" + label], capture_output=True, timeout=15)
         print(json.dumps(result))
-        return 0 if result.get("status") == "ready" else 1
+        return 0 if result.get("status") in ("ready", "prepared") else 1
     except Exception:
         print(json.dumps({"status": "failed", "phase": phase}))
         return 1

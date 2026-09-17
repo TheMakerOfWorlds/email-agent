@@ -1,16 +1,16 @@
 {
   "name": "email-agent",
-  "version": "0.1.0+codex.20260916233836",
-  "description": "Compact Gmail with account routing, organization, attachments, and filters.",
+  "version": "0.1.0+codex.20260917003910",
+  "description": "Account-first Gmail, Calendar, Meet, Drive, Docs, Sheets, and Contacts.",
   "author": {
     "name": "Jackson Stone",
     "url": "https://github.com/TheMakerOfWorlds"
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Email Agent",
-    "shortDescription": "Read, send, organize, and filter Gmail.",
-    "longDescription": "An independent local Gmail client with named accounts, purpose notes, compact results, and Gmail-only OAuth permissions.",
+    "displayName": "Email & Google Workspace",
+    "shortDescription": "Google services across company and personal accounts.",
+    "longDescription": "Local Gmail and optional Google Workspace services with explicit account routing, separate OAuth grants, bounded results, and on-demand service guides.",
     "developerName": "Jackson Stone",
     "category": "Productivity",
     "capabilities": [
@@ -18,14 +18,18 @@
       "Write"
     ],
     "defaultPrompt": [
-      "Find important unread mail across my accounts.",
-      "Use the appropriate company account to reply to this message."
+      "Find unread mail in the right company account.",
+      "Check my company calendar and schedule a Meet.",
+      "Find the right company document or spreadsheet."
     ]
   },
   "license": "MIT",
   "keywords": [
     "email",
     "gmail",
-    "multi-account"
+    "google-workspace",
+    "multi-account",
+    "calendar",
+    "drive"
   ]
 }

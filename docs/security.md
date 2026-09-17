@@ -27,10 +27,11 @@ Account-purpose notes help the agent choose correctly; they are not access-contr
 
 | Location | Contents |
 | --- | --- |
-| macOS Keychain, service `com.themakerofworlds.email-agent` | `client.NAME` desktop-client records and `token.HASH` mailbox refresh grants. Values are private. |
+| macOS Keychain, service `com.themakerofworlds.email-agent` | `client.NAME` Gmail clients, `workspace.client.NAME` Workspace clients, `token.HASH` Gmail grants, and optional separate `workspace.token.HASH` Workspace grants. Values are private. |
 | `~/.config/email-agent/accounts.json` | Addresses, purpose/avoidance notes, optional named client and shared sender configuration. Mode 600 inside a mode-700 directory. |
 | `~/.config/email-agent/sends.sqlite3` | Send request hashes and compact outcomes; no message bodies. |
 | `~/.config/email-agent/operations.sqlite3` | Label/filter creation request hashes and compact outcomes. |
+| `~/.config/email-agent/google-operations.sqlite3` | Optional Workspace operation hashes and compact results, including resource identifiers/returned metadata. No continuous sharing between Macs. |
 | `~/.config/email-agent/filter-backups/` | Removed Gmail filter definitions, which can include private addresses or search criteria. |
 | `~/.config/email-agent/remote.json` | The configured destination's SSH alias and computer/user identity. |
 | Destination `~/.config/email-agent/deployment.json` | Managed deployment revision, file hashes, and account configuration snapshot. |
@@ -48,6 +49,8 @@ OAuth uses a browser, state checking, PKCE, and a temporary loopback callback. T
 Keychain and owner-only files protect storage within the operating system's security model. They do not isolate grants from all software executing with your user privileges or from a compromised unlocked session. Use your own macOS account, protect login access, keep the system updated, and review code before installing updates. Installing arbitrary modified plugin code can expose anything that code can access.
 
 Remote transfer uses pinned SSH host verification and validates the exact computer/user. Credential copying reads only this plugin's configured client and token records. It sends them through memory/stdin into remote Keychain; it does not export a credential file. Normal updates omit `--copy-credentials`. This is a deliberate expansion to another device, and shared grants can be revoked on both devices together. Send ledgers are only snapshot-merged; operation ledgers/filter backups are not continuously synchronized.
+
+Optional Workspace transfer requires its own `--copy-workspace-credentials` flag. Calendar, Meet, Drive, Docs, Sheets and Contacts data returned into an agent is subject to the same local/Google/AI processing boundaries described above. Existing document collaborators and calendar guests may see requested edits or invitations. Drive scope can authorize broad file access even though this command surface does not expose permission management or permanent deletion. See the exact [Workspace scopes and capabilities](workspace-setup.md).
 
 ## Disconnect or remove an installation
 

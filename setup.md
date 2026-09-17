@@ -2,6 +2,8 @@
 
 This is a bring-your-own-Google-app setup: you own the Cloud project, consent screen, desktop OAuth client, and connected mailboxes. You do not sign into the maintainer's OAuth app or send the maintainer any credentials. Read [ownership and privacy](docs/security.md) for the actual access boundaries.
 
+This page covers the **Gmail connection**. For Calendar, Meet, Drive, Docs, Sheets, or Contacts, follow the [optional Workspace setup](docs/workspace-setup.md) after installing the base plugin. Those permissions are isolated from Gmail and require separate consent.
+
 Follow the sections in order through connection, Codex installation, and verification. Aliases and the second Mac are optional. Commands run in the cloned repository unless stated otherwise. Google console labels can change; official links below were checked September 16, 2026.
 
 ## Before you start

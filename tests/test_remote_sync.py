@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 import remote_install as ri
 import sync_remote as sr
 from gmail_backend import OAuth, SCOPES, exact_scopes
+from google_auth import WorkspaceOAuth, scopes_for
 
 
 class RemoteSyncTests(unittest.TestCase):
@@ -99,6 +100,57 @@ class RemoteSyncTests(unittest.TestCase):
             ri.atomic_json(p, {"accounts": []})
             self.assertEqual(p.stat().st_mode & 0o777, 0o600)
             self.assertEqual(list(Path(temp).iterdir()), [p])
+
+    def workspace_credentials(self):
+        account = {"id":"acme","email":"you@acme.example"}
+        client = {"client_id":"workspace.apps.googleusercontent.com","client_secret":"synthetic"}
+        key = WorkspaceOAuth.token_key(account,client)
+        return account,key,{"workspace.client.workspace":client,key:{"email":account["email"],"client_id":client["client_id"],"refresh_token":"synthetic","scopes":scopes_for(["docs"])}}
+
+    def test_workspace_transfer_excludes_other_services_and_unconfigured_accounts(self):
+        account,key,data=self.workspace_credentials()
+        self.assertEqual(set(data),ri.expected_workspace_records([account],data))
+        seen=[]
+        def get(name): seen.append(name); return data.get(name)
+        out=sr.workspace_credential_snapshot([account],WorkspaceOAuth(store=SimpleNamespace(get=get)))
+        self.assertEqual(data,out)
+        self.assertEqual(["workspace.client.workspace",key],seen)
+        data["unrelated.token"]={"secret":"synthetic"}
+        with self.assertRaises(ValueError): ri.expected_workspace_records([account],data)
+
+    def test_workspace_transfer_rejects_orphan_client_and_gmail_scopes(self):
+        account,key,data=self.workspace_credentials()
+        with self.assertRaises(ValueError): ri.expected_workspace_records([account],{"workspace.client.workspace":data["workspace.client.workspace"]})
+        data[key]["scopes"]=list(SCOPES)
+        with self.assertRaises(sr.MailError): ri.expected_workspace_records([account],data)
+
+    def test_normal_sync_does_not_collect_workspace_grants(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home=Path(temp)
+            config=home/"accounts.json"; config.write_text('{"accounts":[]}')
+            mail=SimpleNamespace(home=home,config=config,accounts={})
+            args=["sync_remote.py","--host","remote-mac","--computer-name","Expected Mac","--remote-home","/Users/admin"]
+            probe=SimpleNamespace(returncode=0,stdout=json.dumps({"computer_name":"Expected Mac","home":"/Users/admin"}))
+            ready=SimpleNamespace(returncode=0,stdout=b'{"status":"ready"}')
+            with patch.object(sys,"argv",args),patch.object(sr,"Mail",return_value=mail),patch.object(sr,"source_snapshot",return_value=({},"a"*40)),patch.object(sr.subprocess,"run",side_effect=[probe,ready]),patch.object(sr,"workspace_credential_snapshot") as collect,patch.object(sys,"stdout",io.StringIO()):
+                self.assertEqual(0,sr.main()); collect.assert_not_called()
+
+    def test_staged_sync_installs_via_ssh_then_verifies_in_desktop_session(self):
+        with tempfile.TemporaryDirectory() as temp:
+            home=Path(temp); config=home/"accounts.json"; config.write_text('{"accounts":[]}')
+            mail=SimpleNamespace(home=home,config=config,accounts={})
+            args=["sync_remote.py","--host","remote-mac","--computer-name","Expected Mac","--remote-home","/Users/admin"]
+            responses=[SimpleNamespace(returncode=0,stdout=json.dumps({"computer_name":"Expected Mac","home":"/Users/admin"})),
+                       SimpleNamespace(returncode=0,stdout=b'{"status":"prepared","version":"v1"}'),
+                       SimpleNamespace(returncode=0,stdout=b''),
+                       SimpleNamespace(returncode=0,stdout=b'{"installed":[{"name":"email-agent","version":"v1","enabled":true}]}'),
+                       SimpleNamespace(returncode=0,stdout=b'{"status":"ready"}')]
+            with patch.object(sys,"argv",args),patch.object(sr,"Mail",return_value=mail),patch.object(sr,"source_snapshot",return_value=({},"a"*40)),patch.object(sr.subprocess,"run",side_effect=responses) as run,patch.object(sys,"stdout",io.StringIO()):
+                self.assertEqual(0,sr.main())
+                self.assertEqual("codex plugin add email-agent@personal",run.call_args_list[2].args[0][-1])
+                payload=json.loads(run.call_args_list[4].kwargs["input"])
+                self.assertEqual("verify",payload["stage"])
+                self.assertEqual({},payload["workspace_credentials"])
 
 
 if __name__ == "__main__":

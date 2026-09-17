@@ -70,6 +70,29 @@ def merge_ledger(path, rows):
             db.execute("INSERT OR IGNORE INTO sends VALUES (?,?,?)", (request_id, digest, result))
 
 
+def expected_workspace_records(accounts, credentials):
+    from google_auth import WorkspaceOAuth, checked_scopes
+    expected = set()
+    for account in accounts:
+        client_key = "workspace.client." + account.get("workspace_client", "workspace")
+        client = credentials.get(client_key)
+        if not client:
+            continue
+        if not re.fullmatch(r"[A-Za-z0-9_-]+\.apps\.googleusercontent\.com", client.get("client_id", "")):
+            raise ValueError("Invalid Workspace client")
+        token_key = WorkspaceOAuth.token_key(account, client)
+        token = credentials.get(token_key)
+        if not token:
+            continue
+        if token.get("email") != account["email"] or token.get("client_id") != client["client_id"] or not token.get("refresh_token"):
+            raise ValueError("Workspace identity mismatch")
+        checked_scopes(token.get("scopes"))
+        expected.update((client_key, token_key))
+    if expected != set(credentials):
+        raise ValueError("Unrelated or incomplete Workspace records rejected")
+    return expected
+
+
 def atomic_json(path, value):
     fd, name = tempfile.mkstemp(dir=path.parent, prefix=".email-agent-", suffix=".tmp")
     try:
@@ -115,6 +138,7 @@ def main(raw=None):
         sys.path.insert(0, str(release / "scripts"))
         from email_agent import Mail
         from gmail_backend import Keychain, OAuth, Gmail, exact_scopes
+        from google_auth import WorkspaceOAuth
         source = h / "plugins/email-agent"
         if source.exists() or source.is_symlink():
             if not source.is_symlink() or source.resolve().parent != base:
@@ -152,6 +176,11 @@ def main(raw=None):
         copied = bool(credentials)
         if credentials:
             expected_records(accounts, credentials, OAuth, exact_scopes)
+        workspace_credentials = payload.get("workspace_credentials", {})
+        expected_workspace_records(accounts, workspace_credentials)
+        if set(credentials) & set(workspace_credentials):
+            raise ValueError("Gmail and Workspace must use separate client records")
+        credentials = {**credentials, **workspace_credentials}
         keychain = Keychain()
         class TransferStore:
             def get(self, key):
@@ -166,6 +195,14 @@ def main(raw=None):
             if profile.get("emailAddress", "").lower() != account["email"]:
                 raise ValueError("Remote Gmail identity mismatch")
             verified.append({"id": account["id"], "email": account["email"], "refresh_verified": True})
+        workspace_verified = []
+        workspace_auth = WorkspaceOAuth(store=TransferStore())
+        for account in accounts:
+            client_key = "workspace.client." + account.get("workspace_client", "workspace")
+            client = workspace_auth.store.get(client_key)
+            if client and workspace_auth.store.get(WorkspaceOAuth.token_key(account, client)):
+                workspace_auth.access(account)
+                workspace_verified.append(account["id"])
         phase = "keychain_storage"
         for key, value in credentials.items():
             keychain.put(key, value)
@@ -192,10 +229,16 @@ def main(raw=None):
         link.symlink_to(release, target_is_directory=True)
         os.replace(link, source)
         codex = shutil.which("codex") or "/opt/homebrew/bin/codex"
-        subprocess.run([codex, "plugin", "add", "email-agent@personal"], check=True, capture_output=True, timeout=90)
+        if payload.get("stage") == "prepare":
+            print(json.dumps({"status": "prepared", "version": manifest["version"], "revision": revision}))
+            return 0
         phase = "installed_verification"
-        installed = json.loads(subprocess.check_output([codex, "plugin", "list", "--marketplace", "personal", "--json"], timeout=30))
-        entry = next(x for x in installed["installed"] if x["name"] == "email-agent")
+        if payload.get("stage") == "verify":
+            entry = payload["installation"]  # Fresh SSH CLI result; cache bytes are independently checked below.
+        else:
+            subprocess.run([codex, "plugin", "add", "email-agent@personal"], check=True, capture_output=True, timeout=90)
+            installed = json.loads(subprocess.check_output([codex, "plugin", "list", "--marketplace", "personal", "--json"], timeout=30))
+            entry = next(x for x in installed["installed"] if x["name"] == "email-agent")
         if not entry["enabled"] or entry["version"] != manifest["version"]:
             raise ValueError("Plugin not enabled at intended version")
         cache = h / ".codex/plugins/cache/personal/email-agent" / manifest["version"]
@@ -207,6 +250,10 @@ def main(raw=None):
             result = subprocess.run([sys.executable, str(cache / "scripts/email_agent.py"), "doctor", account["id"]], capture_output=True, timeout=40)
             if result.returncode:
                 raise ValueError("Installed mailbox verification failed")
+            if account["id"] in workspace_verified:
+                result = subprocess.run([sys.executable, str(cache / "scripts/google_agent.py"), "doctor", account["id"]], capture_output=True, timeout=45)
+                if result.returncode:
+                    raise ValueError("Installed Workspace verification failed")
         probe = '''import json,sys
 sys.path.insert(0,sys.argv[1])
 from email_agent import Mail
@@ -228,7 +275,8 @@ print(json.dumps(rows))
                                 "source_hashes": {name: hashlib.sha256(content).hexdigest() for name, content in files.items()}})
         print(json.dumps({"status": "ready", "computer": computer, "source": str(source), "version": manifest["version"],
                           "revision": revision, "enabled": True, "accounts": verified, "credentials_copied": copied,
-                          "ledger_records_supplied": len(payload["ledger"]), "mail_checks": mail_checks}))
+                          "ledger_records_supplied": len(payload["ledger"]), "mail_checks": mail_checks,
+                          "workspace_accounts_verified": workspace_verified, "workspace_credentials_copied": bool(workspace_credentials)}))
         return 0
     except Exception:
         print(json.dumps({"status": "failed", "phase": phase}))

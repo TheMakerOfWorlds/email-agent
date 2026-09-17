@@ -53,6 +53,7 @@ frontmatter = skill.split("---", 2)[1].strip()
 result = {"fixture": "Synthetic 10-message header page and long message; not live email or billing.",
           "tokenizer": "tiktoken/o200k_base", "discovery_metadata_tokens": count(frontmatter),
           "full_skill_tokens": count(skill), "mcp_tool_schemas_added": 0,
+          "on_demand_references_tokens": {p.stem: count(p.read_text()) for p in sorted((ROOT / "skills/email-agent/references").glob("*.md"))},
           "search": {"unprojected_headers_tokens": count(search), "compact_headers_tokens": count(small_search)},
           "read": {"unprojected_full_message_tokens": count(message), "compact_default_chunk_tokens": count(small_read),
                    "full_body_chars": len(body), "returned_body_chars": len(small_read["body"]),

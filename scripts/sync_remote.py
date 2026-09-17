@@ -13,6 +13,7 @@ import sys
 
 from email_agent import Mail
 from gmail_backend import OAuth, exact_scopes
+from google_auth import WorkspaceOAuth, checked_scopes
 from mail_errors import MailError
 
 
@@ -62,12 +63,32 @@ def ledger_snapshot(home):
     return rows
 
 
+def workspace_credential_snapshot(accounts, auth):
+    """Only explicitly requested Workspace grants from configured accounts."""
+    records = {}
+    for account in accounts:
+        client_key = "workspace.client." + account.get("workspace_client", "workspace")
+        client = auth.store.get(client_key)
+        if not client:
+            continue
+        key = WorkspaceOAuth.token_key(account, client)
+        token = auth.store.get(key)
+        if not token:
+            continue
+        if token.get("email") != account["email"] or token.get("client_id") != client["client_id"]:
+            raise MailError("Workspace credential does not match its configured account.")
+        checked_scopes(token.get("scopes"))
+        records[client_key], records[key] = client, token
+    return records
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--host", help="SSH alias for the user's destination Mac; saved after success.")
     parser.add_argument("--computer-name", help="Expected macOS computer name, verified before transfer.")
     parser.add_argument("--remote-home", help="Expected remote account home, verified before transfer.")
     parser.add_argument("--copy-credentials", action="store_true", help="Also copy only this plugin's configured Gmail grants to remote Keychain.")
+    parser.add_argument("--copy-workspace-credentials", action="store_true", help="Explicitly copy this plugin's configured Workspace grants; separate from Gmail transfer.")
     args = parser.parse_args()
     try:
         mail = Mail()
@@ -90,17 +111,34 @@ def main():
         files, revision = source_snapshot()
         accounts = json.loads(mail.config.read_text())
         payload = {"target": target, "revision": revision, "files": files, "accounts": accounts,
-                   "ledger": ledger_snapshot(mail.home), "credentials": {}}
+                   "ledger": ledger_snapshot(mail.home), "credentials": {}, "workspace_credentials": {}}
         if args.copy_credentials:
             payload["credentials"] = credential_snapshot(list(mail.accounts.values()), OAuth())
+        if args.copy_workspace_credentials:
+            payload["workspace_credentials"] = workspace_credential_snapshot(list(mail.accounts.values()), WorkspaceOAuth())
         # The bootstrap is public source code. Sensitive payload bytes only enter SSH stdin.
         receiver = (ROOT / "scripts" / "remote_session.py").read_text()
+        payload["stage"] = "prepare"
         outcome = subprocess.run(ssh + ["python3 -c " + shlex.quote(receiver)],
                                  input=json.dumps(payload).encode(), capture_output=True, timeout=400)
         try:
             report = json.loads(outcome.stdout)
         except ValueError:
             raise MailError("Remote setup returned no safe status; inspect connectivity and retry the same deployment.") from None
+        if not outcome.returncode and report.get("status") == "prepared":
+            # Codex CLI runs in SSH's normal environment. Keychain work stays in the GUI session.
+            install = subprocess.run(ssh + ["codex plugin add email-agent@personal"], capture_output=True, timeout=120)
+            if install.returncode:
+                raise MailError("Remote CLI installation failed; prepared source remains. Retry after checking the remote CLI.")
+            listing = subprocess.run(ssh + ["codex plugin list --marketplace personal --json"], capture_output=True, timeout=40)
+            installed = json.loads(listing.stdout)
+            entry = next((x for x in installed.get("installed", []) if x.get("name") == "email-agent"), {})
+            if not entry.get("enabled") or entry.get("version") != report["version"]:
+                raise MailError("Remote CLI did not verify the expected enabled version.")
+            payload.update(stage="verify", installation={"enabled": True, "version": entry["version"]})
+            outcome = subprocess.run(ssh + ["python3 -c " + shlex.quote(receiver)],
+                                     input=json.dumps(payload).encode(), capture_output=True, timeout=400)
+            report = json.loads(outcome.stdout)
         if outcome.returncode or report.get("status") != "ready":
             # Only the receiver's fixed phase/error labels are safe to expose.
             phase = report.get("phase", "unknown")

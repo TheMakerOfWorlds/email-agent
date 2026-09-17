@@ -1,8 +1,10 @@
-# Email Agent
+# Email Agent — Gmail and Google Workspace
 
 An independent, MIT-licensed Gmail plugin for Codex, owned by [Jackson Stone](https://github.com/TheMakerOfWorlds). No paid email bridge, hosted relay, gogcli runtime, or third-party Python packages. Runtime: Python 3.9+ and macOS Keychain.
 
 Read, search, send, organize, download attachments, and manage saved Gmail filters through compact account-explicit commands. `doctor` verifies mailbox identity and granted permissions; `scripts/auth.py` handles one-time setup.
+
+Optional modules add **Calendar, Meet, Drive, Docs, Sheets, and Contacts** with the same company-specific account directory. The agent chooses an account first, asks when the company is unclear, and loads only the selected service's guide. [Workspace setup and capability map](docs/workspace-setup.md) explains the separate OAuth client and permissions; installing the code alone does not authorize those services.
 
 ## Set up your own installation
 
@@ -19,7 +21,7 @@ Every owner supplies their own Google app and credentials. The repository mainta
 - [Troubleshooting](setup.md#troubleshooting)
 - [Privacy-notice template for your own app](docs/privacy-notice-template.md)
 
-This setup currently requires macOS Keychain. It needs no paid email bridge or hosted relay; Codex/AI service access and any existing Google Workspace subscription are separate. Calendar, Drive, Docs, Sheets, Contacts, Tasks, and Meet are not implemented or authorized by this setup.
+This setup currently requires macOS Keychain. It needs no paid email bridge or hosted relay; Codex/AI service access and any existing Google Workspace subscription are separate. The base setup connects Gmail. Connect the six optional Workspace services through their [own setup guide](docs/workspace-setup.md). Google Tasks is not implemented.
 
 ## Gmail-only access
 
@@ -28,7 +30,7 @@ New connections request two Gmail permissions:
 - `https://www.googleapis.com/auth/gmail.modify` — read/search, send, organize labels, download attachments, move mail to Trash, and restore it.
 - `https://www.googleapis.com/auth/gmail.settings.basic` — Gmail settings and saved filters.
 
-No Drive, Calendar, Contacts, account administration, or broad `mail.google.com` permission. Gmail modify is the narrowest scope that supports Trash and restore; it does not allow immediate permanent message deletion. The client's HTTP allowlist further restricts operations to implemented Gmail routes, including message organization, label creation, and saved filters. Legacy read/send grants remain usable until an account reconnects for organization/settings; validation accepts only those Gmail scopes, including redundant legacy scopes Google may retain during an upgrade. Google defines the scopes in its [Gmail API documentation](https://developers.google.com/workspace/gmail/api/auth/scopes).
+The Gmail grant includes no Drive, Calendar, Contacts, account administration, or broad `mail.google.com` permission. Optional Workspace grants use a different desktop client and Keychain records. Gmail modify is the narrowest scope that supports Trash and restore; it does not allow immediate permanent message deletion. The Gmail client's HTTP allowlist further restricts operations to implemented mail routes. Legacy read/send grants remain usable until an account reconnects for organization/settings. Google defines these scopes in its [Gmail API documentation](https://developers.google.com/workspace/gmail/api/auth/scopes).
 
 Each account has a short ID, an exact email address, and purpose/avoidance notes. Metadata lives in `~/.config/email-agent/accounts.json`, outside this repository. The current Gmail profile is verified before reading, sending, or cleanup; references are bound to the account identity. Cross-account replies and arbitrary From overrides are blocked.
 
@@ -42,7 +44,7 @@ Configure the Google OAuth app as **External / In production** to avoid the seve
 
 ## Small agent context
 
-- Skill-based discovery: 28 tokens of name/description in the current synthetic measurement; the full 615-token instruction loads when relevant. No MCP tool schemas added.
+- Synthetic measurement: 34 discovery tokens and a 641-token shared account/service router. Gmail and each Workspace service have separate on-demand references (roughly 400–650 tokens per service); no MCP tool schemas are added. The detailed advanced-mailbox reference is 1,067 tokens and loads only when needed.
 - Account notes load on demand, without secrets or provider settings.
 - Search retrieves only selected metadata; defaults to 10 results, hard maximum 25, with pagination.
 - Search includes To/Cc and available Delivered-To values. Reads distinguish the authenticated mailbox from recipient aliases and include available forwarding, original-recipient, and mailing-list headers. Repeated delivery headers remain arrays; bounded context reports truncation. Headers do not authorize sending as an alias, and hidden Bcc/stripped routes cannot be inferred.
@@ -53,6 +55,8 @@ Configure the Google OAuth app as **External / In production** to avoid the seve
 [Benchmark results](benchmarks/results.json) use synthetic fixtures and `tiktoken/o200k_base`; they are not measured billing savings. Reading a message still fetches its full body locally before returning a bounded chunk.
 
 ## Use
+
+For Google services, start with `python3 scripts/google_agent.py accounts`, then `google_agent.py SERVICE ACCOUNT ACTION --input FILE`. The [capability map](docs/workspace-setup.md#navigation-and-implemented-capabilities) links each focused command reference. Gmail's existing command syntax below is unchanged.
 
 Follow [setup.md](setup.md), then:
 

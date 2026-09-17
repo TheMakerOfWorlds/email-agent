@@ -131,6 +131,8 @@ class Mail(MailFeatures):
                 raise MailError("This adapter supports Gmail and Google Workspace mail only.")
             if not isinstance(row.get("client", "default"), str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", row.get("client", "default")):
                 raise MailError("Invalid OAuth client name.")
+            if not isinstance(row.get("workspace_client", "workspace"), str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", row.get("workspace_client", "workspace")):
+                raise MailError("Invalid Workspace OAuth client name.")
             for key in ("purpose", "avoid"):
                 if not isinstance(row.get(key, ""), str) or len(row.get(key, "")) > 500:
                     raise MailError("Account purpose and avoid notes must be strings of at most 500 characters.")

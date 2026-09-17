@@ -1,5 +1,7 @@
 # Setup
 
+**First time setting up a plugin?** Start with the [beginner walkthrough](docs/getting-started.md). It explains the terminology, what each stage does, and how to ask an agent to guide you. This page is the detailed command/settings reference; you do not need to understand it all before starting.
+
 This is a bring-your-own-Google-app setup: you own the Cloud project, consent screen, desktop OAuth client, and connected mailboxes. You do not sign into the maintainer's OAuth app or send the maintainer any credentials. Read [ownership and privacy](docs/security.md) for the actual access boundaries.
 
 This page covers the **Gmail connection**. For Calendar, Meet, Drive, Docs, Sheets, or Contacts, follow the [optional Workspace setup](docs/workspace-setup.md) after installing the base plugin. Those permissions are isolated from Gmail and require separate consent.

@@ -10,7 +10,9 @@ The repository is named `google-workspace-agent`. The installed plugin ID, local
 
 ## Set up your own installation
 
-**Start with the [complete setup guide](setup.md).** It takes you from a fresh clone through creating your own Google Cloud project and desktop OAuth app, connecting your mailboxes, installing in Codex, checking delivery, and optionally setting up a second Mac.
+**New to plugins? Start with the [beginner walkthrough](docs/getting-started.md)**, including a ready-to-paste request for Codex to guide you one step at a time.
+
+**For exact commands and Google settings, use the [complete setup reference](setup.md).** It takes you from a fresh clone through creating your own Google Cloud project and desktop OAuth app, connecting your mailboxes, installing in Codex, checking delivery, and optionally setting up a second Mac.
 
 Every owner supplies their own Google app and credentials. The repository maintainer receives no mailbox access from your installation. Your OAuth app being **In production** does not publish your credentials or email. Google still processes Gmail data, and mail returned to your agent is processed by your configured AI service; see [ownership, storage, and access boundaries](docs/security.md).
 
@@ -46,7 +48,7 @@ Configure the Google OAuth app as **External / In production** to avoid the seve
 
 ## Small agent context
 
-- Synthetic measurement: 34 discovery tokens and a 641-token shared account/service router. Gmail and each Workspace service have separate on-demand references (roughly 400–650 tokens per service); no MCP tool schemas are added. The detailed advanced-mailbox reference is 1,067 tokens and loads only when needed.
+- Synthetic measurement: 37 discovery tokens and a 698-token shared account/service router. Gmail and each Workspace service have separate on-demand references (roughly 400–650 tokens per service); no MCP tool schemas are added. The detailed advanced-mailbox reference is 1,067 tokens and the guided-setup reference is 938 tokens; each loads only when needed.
 - Account notes load on demand, without secrets or provider settings.
 - Search retrieves only selected metadata; defaults to 10 results, hard maximum 25, with pagination.
 - Search includes To/Cc and available Delivered-To values. Reads distinguish the authenticated mailbox from recipient aliases and include available forwarding, original-recipient, and mailing-list headers. Repeated delivery headers remain arrays; bounded context reports truncation. Headers do not authorize sending as an alias, and hidden Bcc/stripped routes cannot be inferred.

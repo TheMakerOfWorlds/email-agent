@@ -1,5 +1,9 @@
 # Validation
 
+## Beginner setup guidance — September 17, 2026
+
+Added a plain-language walkthrough, resumable agent setup mode, and a setup discovery trigger. Checked local guide links and plugin/skill schema validation. The setup reference is loaded only for onboarding; routine service commands retain separate references. Runtime behavior is unchanged.
+
 ## GitHub auto-updater — September 16, 2026
 
 - Added an opt-in native macOS LaunchAgent for hourly/login checks, direct GitHub main downloads, bounded staged releases, release tests, source/cache verification, and compact status receipts.
@@ -15,7 +19,7 @@ The Gmail history below remains a record of its earlier live verification. Works
 - Added Calendar, Meet, Drive, Docs, Sheets, and Contacts modules under an explicit account/service command router.
 - Synthetic tests cover account/client/type-bound refs, query-bound pagination, request replay/conflicts, conservative uncertain outcomes, private no-overwrite downloads, wrong/empty Drive destinations, bounded Sheets ranges and RAW writes, document tabs/chunks/index revisions, explicit calendars/timezones/guest notifications, standalone Meet semantics, contact etags, OAuth identity/scope/refresh checks, isolated client/token namespaces, narrow remote transfer, staged remote CLI installation, and transport retry/redaction boundaries.
 - An independent read-only review reproduced and prompted fixes for document continuation, matrix truncation, empty Drive move destinations, append width, stale formatting indexes, and client-name collision. A fictional multi-company scenario correctly required clarification before selecting a work identity.
-- The current synthetic token benchmark is in `benchmarks/results.json`: 34 discovery tokens, 641 router tokens, no MCP schemas. Service references load individually; these counts are not measured billing savings.
+- The current synthetic token benchmark is in `benchmarks/results.json`: 37 discovery tokens, 698 router tokens, no MCP schemas. Service references load individually; these counts are not measured billing savings.
 - Live Workspace verification requires separate Google consent for each intended account. Until consent is completed, do not describe any Workspace account or API as connected/verified. Existing Gmail grants remain separate.
 
 The independent client uses Python standard library and macOS Keychain. No gogcli runtime remains.

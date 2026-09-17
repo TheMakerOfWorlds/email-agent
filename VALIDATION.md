@@ -4,7 +4,8 @@
 
 - Added an opt-in native macOS LaunchAgent for hourly/login checks, direct GitHub main downloads, bounded staged releases, release tests, source/cache verification, and compact status receipts.
 - Real temporary Git repositories exercise checkout and managed-release upgrades, already-current checks, dirty/divergent source protection, version reuse, failed tests, failed installation recovery/retry, disabled plugins, and cache tampering. Additional boundary tests cover repository/path restrictions, inherited environment isolation, and concurrent updater locking.
-- Auto-updates do not call Google, transfer credentials, or synchronize account notes. Live deployment evidence is recorded after verifying the installed jobs.
+- All 164 tests passed on the local and remote Macs. Both native hourly/login LaunchAgents were enabled and completed a live GitHub check with `current` status and matching installed source/cache. The initial deployment also refreshed all four existing Gmail accounts without copying credentials.
+- Auto-updates do not call Google, transfer credentials, or synchronize account notes. The compact per-Mac receipt records later verified upgrades with the previous/new revision and installed version.
 
 
 ## Optional Workspace expansion — September 16, 2026

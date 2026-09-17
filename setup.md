@@ -18,7 +18,7 @@ python3 --version
 git --version
 codex plugin --help
 mkdir -p "$HOME/plugins"
-git clone https://github.com/TheMakerOfWorlds/email-agent.git "$HOME/plugins/email-agent"
+git clone https://github.com/TheMakerOfWorlds/google-workspace-agent.git "$HOME/plugins/email-agent"
 cd "$HOME/plugins/email-agent"
 ```
 

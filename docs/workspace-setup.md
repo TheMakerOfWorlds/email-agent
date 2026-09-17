@@ -2,7 +2,7 @@
 
 Email Agent now also provides Calendar, Meet, Drive, Docs, Sheets, and Contacts commands. Each is loaded only when used. Existing Gmail credentials and commands stay independent. Adding code does **not** grant Google access: each intended account must authorize the Workspace client separately.
 
-Start with the [base installation](../setup.md). Reuse the private `accounts.json` and company-specific purpose notes. Do not create one generic “work” account for multiple companies. The plugin retains its `email-agent` repository/package name for installation compatibility.
+Start with the [base installation](../setup.md). Reuse the private `accounts.json` and company-specific purpose notes. Do not create one generic “work” account for multiple companies. The plugin retains its `email-agent` installed package name for installation compatibility.
 
 ## Navigation and implemented capabilities
 

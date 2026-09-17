@@ -167,6 +167,12 @@ class UpdateIntegrationTests(unittest.TestCase):
         self.commit('0.1.0+one')
         with self.assertRaisesRegex(au.UpdateError, 'release_version_not_changed'): au.update(self.home, self.config)
 
+    def test_legacy_official_origin_keeps_updating_after_rename(self):
+        self.g(self.source, 'remote', 'set-url', 'origin', 'https://github.com/'+au.LEGACY_REPO+'.git')
+        self.config['repository'] = au.LEGACY_REPO
+        self.assertEqual(au.update(self.home, self.config)['status'], 'updated')
+        self.assertEqual(self.g(self.source, 'rev-parse', 'HEAD'), self.new)
+
     def test_wrong_origin_rejected(self):
         self.g(self.source, 'remote', 'set-url', 'origin', 'https://github.com/other/repo.git')
         with self.assertRaisesRegex(au.UpdateError, 'repository_mismatch'): au.update(self.home, self.config)
@@ -179,6 +185,11 @@ class UpdateIntegrationTests(unittest.TestCase):
 
 
 class UpdateBoundaryTests(unittest.TestCase):
+    def test_official_rename_does_not_redirect_custom_forks(self):
+        self.assertEqual(au.canonical_repository(au.LEGACY_REPO), au.DEFAULT_REPO)
+        self.assertEqual(au.canonical_repository('someone/email-agent'), 'someone/email-agent')
+        self.assertIn(au.DEFAULT_REPO, au.repository_url(au.LEGACY_REPO))
+
     def test_repository_is_github_slug_only(self):
         for repo in ('../repo', 'user/repo;echo', 'user/repo/extra', 'https://github.com/u/r', 'u/r?token=x'):
             with self.assertRaises(au.UpdateError): au.repository_url(repo)

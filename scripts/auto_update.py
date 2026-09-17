@@ -18,7 +18,8 @@ import tempfile
 import time
 
 LABEL = 'com.themakerofworlds.email-agent.update'
-DEFAULT_REPO = 'TheMakerOfWorlds/email-agent'
+DEFAULT_REPO = 'TheMakerOfWorlds/google-workspace-agent'
+LEGACY_REPO = 'TheMakerOfWorlds/email-agent'
 
 
 class UpdateError(Exception):
@@ -59,7 +60,12 @@ def git(repo, home, *args):
     return run(['git', '-c', 'core.hooksPath=/dev/null', '-C', str(repo), *args], home)
 
 
+def canonical_repository(repo):
+    return DEFAULT_REPO if repo == LEGACY_REPO else repo
+
+
 def repository_url(repo):
+    repo = canonical_repository(repo)
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', repo) or any(x in ('.', '..') for x in repo.split('/')):
         raise UpdateError('invalid_repository')
     return 'https://github.com/'+repo+'.git'
@@ -109,6 +115,8 @@ def check_source(source, home, base, expected_url):
         origin = git(actual, home, 'remote', 'get-url', 'origin').decode().strip()
         accepted = {expected_url, expected_url.removesuffix('.git'),
                     'git@github.com:'+expected_url.split('github.com/', 1)[1]}
+        if expected_url == repository_url(DEFAULT_REPO):
+            accepted.update({'https://github.com/'+LEGACY_REPO+'.git', 'https://github.com/'+LEGACY_REPO, 'git@github.com:'+LEGACY_REPO+'.git'})
         if origin not in accepted:
             raise UpdateError('repository_mismatch')
         if not git(actual, home, 'branch', '--show-current').strip():
@@ -233,6 +241,7 @@ def main(argv=None):
     parser.add_argument('action', choices=['enable', 'disable', 'status', 'run'])
     parser.add_argument('--repository', default=DEFAULT_REPO, help='Trusted GitHub OWNER/REPO, main branch.')
     args = parser.parse_args(argv)
+    args.repository = canonical_repository(args.repository)
     home = Path.home()
     config_dir = home / '.config/email-agent'
     config_path = config_dir / 'auto-update.json'
@@ -272,6 +281,9 @@ def main(argv=None):
             result = {'enabled': True, 'repository': args.repository, 'interval_seconds': 3600}
         else:
             config = json.loads(config_path.read_text())
+            if config.get('repository') == LEGACY_REPO:
+                config['repository'] = DEFAULT_REPO
+                save(config_path, config)
             if not config.get('enabled'):
                 raise UpdateError('updates_disabled')
             config_dir.mkdir(parents=True, exist_ok=True, mode=0o700)

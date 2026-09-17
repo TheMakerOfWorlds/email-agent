@@ -1,6 +1,6 @@
 {
   "name": "email-agent",
-  "version": "0.1.0+codex.20260917023603",
+  "version": "0.1.0+codex.20260917162059",
   "description": "Account-first Gmail, Calendar, Meet, Drive, Docs, Sheets, and Contacts.",
   "author": {
     "name": "Jackson Stone",
@@ -8,7 +8,7 @@
   },
   "skills": "./skills/",
   "interface": {
-    "displayName": "Email & Google Workspace",
+    "displayName": "Google Workspace Agent",
     "shortDescription": "Google services across company and personal accounts.",
     "longDescription": "Local Gmail and optional Google Workspace services with explicit account routing, separate OAuth grants, bounded results, and on-demand service guides.",
     "developerName": "Jackson Stone",

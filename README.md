@@ -1,10 +1,12 @@
-# Email Agent — Gmail and Google Workspace
+# Google Workspace Agent
 
-An independent, MIT-licensed Gmail plugin for Codex, owned by [Jackson Stone](https://github.com/TheMakerOfWorlds). No paid email bridge, hosted relay, gogcli runtime, or third-party Python packages. Runtime: Python 3.9+ and macOS Keychain.
+An independent, MIT-licensed Google Workspace plugin for Codex, owned by [Jackson Stone](https://github.com/TheMakerOfWorlds). No paid email bridge, hosted relay, gogcli runtime, or third-party Python packages. Runtime: Python 3.9+ and macOS Keychain.
 
 Read, search, send, organize, download attachments, and manage saved Gmail filters through compact account-explicit commands. `doctor` verifies mailbox identity and granted permissions; `scripts/auth.py` handles one-time setup.
 
 Optional modules add **Calendar, Meet, Drive, Docs, Sheets, and Contacts** with the same company-specific account directory. The agent chooses an account first, asks when the company is unclear, and loads only the selected service's guide. [Workspace setup and capability map](docs/workspace-setup.md) explains the separate OAuth client and permissions; installing the code alone does not authorize those services.
+
+The repository is named `google-workspace-agent`. The installed plugin ID, local folder, and credential storage retain `email-agent` for compatibility with existing installations.
 
 ## Set up your own installation
 
@@ -103,7 +105,7 @@ python3 scripts/auto_update.py enable
 python3 scripts/auto_update.py status
 ```
 
-A native macOS login agent checks `TheMakerOfWorlds/email-agent` on GitHub's `main` branch hourly and at login, with no AI calls. New versions are tested, installed into Codex, and checked against the downloaded source. Local changes, divergent history, disabled plugins, and reused release versions stop the update. Google credentials and account notes are untouched. New Codex tasks pick up updated instructions.
+A native macOS login agent checks `TheMakerOfWorlds/google-workspace-agent` on GitHub's `main` branch hourly and at login, with no AI calls. New versions are tested, installed into Codex, and checked against the downloaded source. Local changes, divergent history, disabled plugins, and reused release versions stop the update. Google credentials and account notes are untouched. New Codex tasks pick up updated instructions.
 
 Use `python3 scripts/auto_update.py disable` to stop, or `run` to check immediately. Enabling updates trusts future code published to that repository; forks can select `--repository OWNER/REPO`. See [automatic-update setup and recovery](docs/auto-updates.md).
 

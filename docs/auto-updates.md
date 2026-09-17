@@ -13,7 +13,7 @@ python3 scripts/auto_update.py status
 
 The command installs a per-user macOS LaunchAgent, checks immediately, then checks hourly while that user is logged in. It checks again at login. A sleeping, offline, or logged-out Mac cannot update until it runs again. Each Mac downloads independently from GitHub; it does not need the other Mac to be online. Setup does not automatically enable updates for people who only clone the repository.
 
-The default trusted upstream is `TheMakerOfWorlds/email-agent`, branch `main`. To follow your own fork, configure that fork as the checkout's `origin` and enable with `--repository YOUR_NAME/email-agent`. Only a GitHub owner/repository slug is accepted. Do not put credentials in URLs. This implementation targets the existing `personal` local marketplace; a differently named marketplace needs adaptation before enabling.
+The default trusted upstream is `TheMakerOfWorlds/google-workspace-agent`, branch `main`. To follow your own fork, configure that fork as the checkout's `origin` and enable with `--repository YOUR_NAME/google-workspace-agent`. Only a GitHub owner/repository slug is accepted. Do not put credentials in URLs. This implementation targets the existing `personal` local marketplace; a differently named marketplace needs adaptation before enabling.
 
 Enabling updates authorizes installing and running future code from that upstream, including its tests. Tests are compatibility checks, not a security sandbox. No new Google scopes are automatically granted. A feature that needs new access still requires Google consent.
 
@@ -51,3 +51,7 @@ The status receipt is at `~/.config/email-agent/auto-update-status.json`; settin
 - **Removing the plugin:** Disable updates first, then follow [removal instructions](security.md#remove-an-installation).
 
 Maintainer workflow still runs tests and validators, updates the manifest with the plugin-creator cachebuster helper, commits, and publishes to `main`. Initial second-Mac setup and deliberate credential/account-note transfers still use `sync_remote.py`; auto-updates only distribute public code. Avoid simultaneous manual deployment and updater runs by disabling updates during a deliberate deployment, then re-enabling them afterward.
+
+## Repository rename compatibility
+
+The repository was renamed from `TheMakerOfWorlds/email-agent` to `TheMakerOfWorlds/google-workspace-agent`. Updated clients normalize the old official upstream to the new name and accept an existing checkout with the old official origin. Custom forks are unchanged. The installed plugin ID and local paths remain `email-agent`; keep the explicit destination in the clone command.

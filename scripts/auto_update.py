@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Opt-in macOS GitHub updater. Never reads Google credentials or mailbox data."""
+"""Configurable macOS GitHub updater. Never reads Google credentials or mailbox data."""
 import argparse
 import contextlib
 import fcntl

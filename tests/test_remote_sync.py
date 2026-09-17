@@ -132,7 +132,7 @@ class RemoteSyncTests(unittest.TestCase):
             args=["sync_remote.py","--host","remote-mac","--computer-name","Expected Mac","--remote-home","/Users/admin"]
             probe=SimpleNamespace(returncode=0,stdout=json.dumps({"computer_name":"Expected Mac","home":"/Users/admin"}))
             ready=SimpleNamespace(returncode=0,stdout=b'{"status":"ready"}')
-            with patch.object(sys,"argv",args),patch.object(sr,"Mail",return_value=mail),patch.object(sr,"source_snapshot",return_value=({},"a"*40)),patch.object(sr.subprocess,"run",side_effect=[probe,ready]),patch.object(sr,"workspace_credential_snapshot") as collect,patch.object(sys,"stdout",io.StringIO()):
+            with patch.object(sys,"argv",args),patch.object(sr,"Mail",return_value=mail),patch.object(sr,"source_snapshot",return_value=({},"a"*40)),patch.object(sr.subprocess,"run",side_effect=[probe,ready,SimpleNamespace(returncode=0,stdout=b'{"auto_updates":{"enabled":true}}')]),patch.object(sr,"workspace_credential_snapshot") as collect,patch.object(sys,"stdout",io.StringIO()):
                 self.assertEqual(0,sr.main()); collect.assert_not_called()
 
     def test_staged_sync_installs_via_ssh_then_verifies_in_desktop_session(self):
@@ -144,13 +144,15 @@ class RemoteSyncTests(unittest.TestCase):
                        SimpleNamespace(returncode=0,stdout=b'{"status":"prepared","version":"v1"}'),
                        SimpleNamespace(returncode=0,stdout=b''),
                        SimpleNamespace(returncode=0,stdout=b'{"installed":[{"name":"email-agent","version":"v1","enabled":true}]}'),
-                       SimpleNamespace(returncode=0,stdout=b'{"status":"ready"}')]
+                       SimpleNamespace(returncode=0,stdout=b'{"status":"ready"}'),
+                       SimpleNamespace(returncode=0,stdout=b'{"auto_updates":{"enabled":true}}')]
             with patch.object(sys,"argv",args),patch.object(sr,"Mail",return_value=mail),patch.object(sr,"source_snapshot",return_value=({},"a"*40)),patch.object(sr.subprocess,"run",side_effect=responses) as run,patch.object(sys,"stdout",io.StringIO()):
                 self.assertEqual(0,sr.main())
                 self.assertEqual("codex plugin add email-agent@personal",run.call_args_list[2].args[0][-1])
                 payload=json.loads(run.call_args_list[4].kwargs["input"])
                 self.assertEqual("verify",payload["stage"])
                 self.assertEqual({},payload["workspace_credentials"])
+                self.assertIn("install.py --configure-updates",run.call_args_list[5].args[0][-1])
 
 
 if __name__ == "__main__":

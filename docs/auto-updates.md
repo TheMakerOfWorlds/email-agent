@@ -1,17 +1,17 @@
 # Automatic updates from GitHub
 
-Complete the normal [installation](../setup.md) first. Automatic updates are optional and require macOS, Python 3.9+, Git, an enabled `email-agent@personal` installation, and the existing `~/plugins/email-agent` source. No paid service, agent turn, GitHub token, or additional Google permission is needed for this public repository.
+Complete the normal [installation](../setup.md) first. Automatic updates are enabled by default by `scripts/install.py` on first setup and require macOS, Python 3.9+, Git, an enabled `email-agent@personal` installation, and the existing `~/plugins/email-agent` source. No paid service, agent turn, GitHub token, or additional Google permission is needed for this public repository.
 
-## Enable on each Mac
+## Install on each Mac
 
 From the source checkout:
 
 ```bash
-python3 scripts/auto_update.py enable
+python3 scripts/install.py
 python3 scripts/auto_update.py status
 ```
 
-The command installs a per-user macOS LaunchAgent, checks immediately, then checks hourly while that user is logged in. It checks again at login. A sleeping, offline, or logged-out Mac cannot update until it runs again. Each Mac downloads independently from GitHub; it does not need the other Mac to be online. Setup does not automatically enable updates for people who only clone the repository.
+The command installs a per-user macOS LaunchAgent, checks immediately, then checks hourly while that user is logged in. It checks again at login. A sleeping, offline, or logged-out Mac cannot update until it runs again. Each Mac downloads independently from GitHub; it does not need the other Mac to be online. Cloning alone or bypassing the installer with a direct `codex plugin add` does not enable the updater. Use `python3 scripts/install.py --no-auto-update` to opt out during setup. Initial `sync_remote.py` deployment also enables updates by default unless `--no-auto-update` is supplied. Reinstalls/deployments preserve an existing disabled preference.
 
 The default trusted upstream is `TheMakerOfWorlds/google-workspace-agent`, branch `main`. To follow your own fork, configure that fork as the checkout's `origin` and enable with `--repository YOUR_NAME/google-workspace-agent`. Only a GitHub owner/repository slug is accepted. Do not put credentials in URLs. This implementation targets the existing `personal` local marketplace; a differently named marketplace needs adaptation before enabling.
 
@@ -36,7 +36,7 @@ python3 scripts/auto_update.py run
 python3 scripts/auto_update.py disable
 ```
 
-`status` shows enabled/loaded state, upstream, and the latest receipt: `current`, `updated`, or `failed`, with the revision/version when verified. A `busy` result means another updater holds the lock. `run` requires updates to be enabled. `disable` unloads/removes the LaunchAgent but leaves the installed plugin, credentials, source, and last status intact. Re-enable with the first command above.
+`status` shows enabled/loaded state, upstream, and the latest receipt: `current`, `updated`, or `failed`, with the revision/version when verified. A `busy` result means another updater holds the lock. `run` requires updates to be enabled. `disable` unloads/removes the LaunchAgent but leaves the installed plugin, credentials, source, and last status intact. Re-enable explicitly with `python3 scripts/auto_update.py enable`; rerunning the installer preserves a saved disabled preference.
 
 The status receipt is at `~/.config/email-agent/auto-update-status.json`; settings are beside it in `auto-update.json`. The LaunchAgent is `~/Library/LaunchAgents/com.themakerofworlds.email-agent.update.plist`. No mailbox content, OAuth values, subprocess output, or continuously growing log is written by the updater.
 

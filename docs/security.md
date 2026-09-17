@@ -35,9 +35,9 @@ Account-purpose notes help the agent choose correctly; they are not access-contr
 | `~/.config/email-agent/filter-backups/` | Removed Gmail filter definitions, which can include private addresses or search criteria. |
 | `~/.config/email-agent/remote.json` | The configured destination's SSH alias and computer/user identity. |
 | Destination `~/.config/email-agent/deployment.json` | Managed deployment revision, file hashes, and account configuration snapshot. |
-| `~/.config/email-agent/auto-update*.json`, `update.lock` | Opt-in updater settings and compact last-check status; no OAuth grants. |
+| `~/.config/email-agent/auto-update*.json`, `update.lock` | Updater settings and compact last-check status; no OAuth grants. |
 | `~/.local/share/email-agent/upstream.git` and `releases/` | Public Git history and staged/retained code releases. |
-| `~/Library/LaunchAgents/com.themakerofworlds.email-agent.update.plist` | Optional hourly/login updater job. |
+| `~/Library/LaunchAgents/com.themakerofworlds.email-agent.update.plist` | Hourly/login updater job, enabled by the standard installer unless opted out. |
 | Paths you choose | Downloaded attachments, local outgoing-message JSON, and other files you create. Keep them out of repositories/shared folders. |
 | `~/plugins/email-agent`, Codex plugin cache, and remote release directories | Plugin code and documentation; grants are stored separately. |
 
@@ -66,6 +66,6 @@ Optional Workspace transfer requires its own `--copy-workspace-credentials` flag
 
 Data already returned to an AI service is governed by that service's controls; local uninstall does not remove those conversations. The [setup guide](../setup.md) explains reconnecting and recovering access without exposing credentials.
 
-## Optional GitHub updates
+## GitHub updates
 
-Enabling automatic updates trusts future code on the configured GitHub repository main branch. The updater downloads and executes release tests before installation; those tests are not a sandbox or an independent security audit. The updater itself does not read Keychain, call Google APIs, or transfer account configuration. Installed future plugin code runs as your macOS user, like the current plugin. GitHub receives ordinary code-fetch requests. Checks use no AI calls. Use your own maintained fork or disable updates if you need to review every change first.
+The standard installer enables automatic updates on first setup unless `--no-auto-update` is supplied; reinstalling preserves an explicit disabled preference. Automatic updates trust future code on the configured GitHub repository main branch. The updater downloads and executes release tests before installation; those tests are not a sandbox or an independent security audit. The updater itself does not read Keychain, call Google APIs, or transfer account configuration. Installed future plugin code runs as your macOS user, like the current plugin. GitHub receives ordinary code-fetch requests. Checks use no AI calls. Use your own maintained fork or disable updates if you need to review every change first.

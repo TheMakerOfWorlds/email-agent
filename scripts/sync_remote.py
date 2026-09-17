@@ -89,6 +89,7 @@ def main():
     parser.add_argument("--remote-home", help="Expected remote account home, verified before transfer.")
     parser.add_argument("--copy-credentials", action="store_true", help="Also copy only this plugin's configured Gmail grants to remote Keychain.")
     parser.add_argument("--copy-workspace-credentials", action="store_true", help="Explicitly copy this plugin's configured Workspace grants; separate from Gmail transfer.")
+    parser.add_argument("--no-auto-update", action="store_true", help="Disable automatic GitHub updates on the destination; later syncs preserve this preference.")
     args = parser.parse_args()
     try:
         mail = Mail()
@@ -145,6 +146,13 @@ def main():
             if not re.fullmatch(r"[a-z_]{1,40}", str(phase)):
                 phase = "unknown"
             raise MailError("Remote setup failed during " + phase + "; partial progress remains. Retry after resolving that phase.")
+        update_command = "python3 " + shlex.quote(target["home"] + "/plugins/email-agent/scripts/install.py") + " --configure-updates"
+        if args.no_auto_update:
+            update_command += " --no-auto-update"
+        configured = subprocess.run(ssh + [update_command], capture_output=True, timeout=45)
+        if configured.returncode:
+            raise MailError("Remote plugin is deployed, but automatic-update configuration failed; retry after checking the destination.")
+        report["auto_updates"] = json.loads(configured.stdout)["auto_updates"]
         mail.home.mkdir(parents=True, exist_ok=True, mode=0o700)
         temp = target_path.with_suffix(".tmp")
         fd = os.open(temp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)

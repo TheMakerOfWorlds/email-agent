@@ -213,11 +213,13 @@ Do not run the scaffolder over your checkout or use `--force` to suppress an exi
 For the default marketplace name `personal` returned above:
 
 ```bash
-codex plugin add email-agent@personal
+python3 scripts/install.py
 codex plugin list --marketplace personal --json
 ```
 
-If your marketplace already has another name, use the helper's returned name in both commands. The remote installer currently requires `personal`; do not rename an existing marketplace just to fit it. The default `~/.agents/plugins/marketplace.json` is discovered implicitly; it does not need `codex plugin marketplace add`.
+The installer enables hourly GitHub updates by default on first installation. Use `python3 scripts/install.py --no-auto-update` to opt out; reinstalls preserve a saved opt-out. It trusts future code published to the configured upstream. For a fork, pass `--repository OWNER/REPO`.
+
+If your marketplace already has another name, install with `codex plugin add email-agent@YOUR_MARKETPLACE` and use that name in the list command; the default updater supports only `personal`. The remote installer currently requires `personal`; do not rename an existing marketplace just to fit it. The default `~/.agents/plugins/marketplace.json` is discovered implicitly; it does not need `codex plugin marketplace add`.
 
 Verify the installed entry has `enabled: true`, the version from `.codex-plugin/plugin.json`, and the expected source path. Credentials and notes remain outside the plugin cache. Start a **new Codex task** and say:
 
@@ -310,9 +312,9 @@ python3 scripts/sync_remote.py
 
 These update commands are for a source checkout following its reviewed upstream; if `git status` shows changes, preserve/reconcile them before pulling. When maintaining your own fork, follow its review process. For your own source edits, first run the tests and Codex validators, use the plugin-creator `update_plugin_cachebuster.py` helper on the checkout, commit the reviewed changes, and reinstall. Upstream releases already carry a version; do not change it merely to install a published update. Never edit the installed cache as the source of truth.
 
-Normal updates reuse the remote credentials, copy current notes and code, and verify every mailbox through a fresh process. Use `--copy-credentials` again only when authorized to transfer newly connected or replaced Gmail grants. Local source must be clean and committed; remote source/notes edited outside deployment must be reconciled first. Releases are retained for recovery. A failure preserves completed steps, reports its phase without secret output, and can be retried with the same command. Success requires `status: ready`, `enabled: true`, the intended version/revision, and the per-account verification results. Current sync supports one saved destination and always uses the destination's default config directory.
+Initial remote deployment enables hourly GitHub updates by default. Pass `--no-auto-update` to `sync_remote.py` to opt out; later deployments preserve an existing opt-out. Normal updates reuse the remote credentials, copy current notes and code, and verify every mailbox through a fresh process. Use `--copy-credentials` again only when authorized to transfer newly connected or replaced Gmail grants. Local source must be clean and committed; remote source/notes edited outside deployment must be reconciled first. Releases are retained for recovery. A failure preserves completed steps, reports its phase without secret output, and can be retried with the same command. Success requires `status: ready`, `enabled: true`, the intended version/revision, and the per-account verification results. Current sync supports one saved destination and always uses the destination's default config directory.
 
-The source machine's compact send history is merged without replacing remote outcomes. This is a snapshot, not a continuously shared ledger: investigate pending/uncertain sends on the original machine, and do not move an unresolved send to the other Mac as a retry. No email sync loop is installed. Code updates can run hourly after explicitly enabling the [GitHub auto-updater](docs/auto-updates.md) on each Mac.
+The source machine's compact send history is merged without replacing remote outcomes. This is a snapshot, not a continuously shared ledger: investigate pending/uncertain sends on the original machine, and do not move an unresolved send to the other Mac as a retry. No email sync loop is installed. Code updates can run hourly by default after standard installation on each Mac; see [GitHub auto-updates](docs/auto-updates.md) for opt-out and recovery.
 
 The plugin is enabled at user level on each Mac. Start a new Codex task after installation to load its skill; existing tasks created before installation may need a new task. Ordinary prompts such as “Use Email Agent to check my company mail” can select the skill. Mailbox notes load from local configuration when needed.
 

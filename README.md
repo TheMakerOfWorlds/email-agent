@@ -98,16 +98,16 @@ Label/filter creation requires a stable request ID, recorded in a separate owner
 
 ## Automatic updates from GitHub
 
-After installation, opt in on each Mac:
+The standard installer enables hourly GitHub updates by default on first setup:
 
 ```bash
-python3 scripts/auto_update.py enable
+python3 scripts/install.py
 python3 scripts/auto_update.py status
 ```
 
 A native macOS login agent checks `TheMakerOfWorlds/google-workspace-agent` on GitHub's `main` branch hourly and at login, with no AI calls. New versions are tested, installed into Codex, and checked against the downloaded source. Local changes, divergent history, disabled plugins, and reused release versions stop the update. Google credentials and account notes are untouched. New Codex tasks pick up updated instructions.
 
-Use `python3 scripts/auto_update.py disable` to stop, or `run` to check immediately. Enabling updates trusts future code published to that repository; forks can select `--repository OWNER/REPO`. See [automatic-update setup and recovery](docs/auto-updates.md).
+Use `python3 scripts/install.py --no-auto-update` to install without updates, or `python3 scripts/auto_update.py disable` to stop them later. Reinstalls preserve an explicit opt-out. Use `python3 scripts/auto_update.py enable` to re-enable, or `run` to check immediately. Enabling updates trusts future code published to that repository; forks can select `--repository OWNER/REPO`. See [automatic-update setup and recovery](docs/auto-updates.md).
 
 ## Development and ownership
 

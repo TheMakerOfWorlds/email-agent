@@ -35,6 +35,9 @@ Account-purpose notes help the agent choose correctly; they are not access-contr
 | `~/.config/email-agent/filter-backups/` | Removed Gmail filter definitions, which can include private addresses or search criteria. |
 | `~/.config/email-agent/remote.json` | The configured destination's SSH alias and computer/user identity. |
 | Destination `~/.config/email-agent/deployment.json` | Managed deployment revision, file hashes, and account configuration snapshot. |
+| `~/.config/email-agent/auto-update*.json`, `update.lock` | Opt-in updater settings and compact last-check status; no OAuth grants. |
+| `~/.local/share/email-agent/upstream.git` and `releases/` | Public Git history and staged/retained code releases. |
+| `~/Library/LaunchAgents/com.themakerofworlds.email-agent.update.plist` | Optional hourly/login updater job. |
 | Paths you choose | Downloaded attachments, local outgoing-message JSON, and other files you create. Keep them out of repositories/shared folders. |
 | `~/plugins/email-agent`, Codex plugin cache, and remote release directories | Plugin code and documentation; grants are stored separately. |
 
@@ -55,10 +58,14 @@ Optional Workspace transfer requires its own `--copy-workspace-credentials` flag
 ## Disconnect or remove an installation
 
 1. In each connected Google account, open [third-party connections](https://myaccount.google.com/connections), select your own app by its consent-screen name, and remove its access when you want to revoke it. Revocation can affect both Macs using the same grants. Removing local files alone is not server-side revocation.
-2. Remove the plugin with `codex plugin remove email-agent@personal` (substitute your actual marketplace name). Check the installed list and use a new task afterward. Removing the plugin is separate from deleting the checkout/marketplace entry and credentials.
+2. If enabled, stop automatic updates first with `python3 scripts/auto_update.py disable`. Remove the plugin with `codex plugin remove email-agent@personal` (substitute your actual marketplace name). Check the installed list and use a new task afterward. Removing the plugin is separate from deleting the checkout/marketplace entry and credentials.
 3. In Keychain Access, find this plugin's service and remove only its intended client/token records. Do not display/export their values. Multiple accounts may share one named client; do not remove that client if you intend to keep other connected accounts using it. There is no built-in per-account disconnect command yet.
 4. Remove an unused account from the private `accounts.json`. If retiring the whole installation, remove its private configuration, ledgers, filter backups, and any downloaded attachments/outgoing-message files you no longer need. Repeat local cleanup on each Mac. Preserve unresolved operation records until you have checked their Gmail outcomes.
 5. Gmail filters and messages remain in Gmail after local uninstall. Delete unwanted saved filters deliberately in Gmail or with the filter commands before removing access. Revocation/uninstall does not recall sent email or remove already delivered attachments.
 6. If retiring the Google app itself, remove its dedicated client/project through Google Cloud only after confirming no remaining installation relies on it. Keep unrelated Cloud projects and credentials intact.
 
 Data already returned to an AI service is governed by that service's controls; local uninstall does not remove those conversations. The [setup guide](../setup.md) explains reconnecting and recovering access without exposing credentials.
+
+## Optional GitHub updates
+
+Enabling automatic updates trusts future code on the configured GitHub repository main branch. The updater downloads and executes release tests before installation; those tests are not a sandbox or an independent security audit. The updater itself does not read Keychain, call Google APIs, or transfer account configuration. Installed future plugin code runs as your macOS user, like the current plugin. GitHub receives ordinary code-fetch requests. Checks use no AI calls. Use your own maintained fork or disable updates if you need to review every change first.

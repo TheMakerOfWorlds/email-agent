@@ -1,4 +1,11 @@
-# Validation — September 4, 2026
+# Validation
+
+## GitHub auto-updater — September 16, 2026
+
+- Added an opt-in native macOS LaunchAgent for hourly/login checks, direct GitHub main downloads, bounded staged releases, release tests, source/cache verification, and compact status receipts.
+- Real temporary Git repositories exercise checkout and managed-release upgrades, already-current checks, dirty/divergent source protection, version reuse, failed tests, failed installation recovery/retry, disabled plugins, and cache tampering. Additional boundary tests cover repository/path restrictions, inherited environment isolation, and concurrent updater locking.
+- Auto-updates do not call Google, transfer credentials, or synchronize account notes. Live deployment evidence is recorded after verifying the installed jobs.
+
 
 ## Optional Workspace expansion — September 16, 2026
 

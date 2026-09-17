@@ -270,6 +270,8 @@ Your installation is ready when:
 
 ## Another Mac and later updates
 
+For automatic updates from GitHub, follow [automatic-update setup](docs/auto-updates.md) after the initial installation on each Mac. The manual development/deployment workflow below remains available.
+
 The destination must be your own intended Mac/user, with Python 3.9+, Codex CLI, the bundled plugin-creator helper, and an accessible login Keychain. Log into its graphical desktop; a headless SSH session alone is insufficient for the session helper. Set up macOS Remote Login for the intended user and SSH key authentication. Keep SSH on a trusted network or your own secure network connection.
 
 On the destination, obtain the exact values:
@@ -310,7 +312,7 @@ These update commands are for a source checkout following its reviewed upstream;
 
 Normal updates reuse the remote credentials, copy current notes and code, and verify every mailbox through a fresh process. Use `--copy-credentials` again only when authorized to transfer newly connected or replaced Gmail grants. Local source must be clean and committed; remote source/notes edited outside deployment must be reconciled first. Releases are retained for recovery. A failure preserves completed steps, reports its phase without secret output, and can be retried with the same command. Success requires `status: ready`, `enabled: true`, the intended version/revision, and the per-account verification results. Current sync supports one saved destination and always uses the destination's default config directory.
 
-The source machine's compact send history is merged without replacing remote outcomes. This is a snapshot, not a continuously shared ledger: investigate pending/uncertain sends on the original machine, and do not move an unresolved send to the other Mac as a retry. No background timer or email sync loop is installed.
+The source machine's compact send history is merged without replacing remote outcomes. This is a snapshot, not a continuously shared ledger: investigate pending/uncertain sends on the original machine, and do not move an unresolved send to the other Mac as a retry. No email sync loop is installed. Code updates can run hourly after explicitly enabling the [GitHub auto-updater](docs/auto-updates.md) on each Mac.
 
 The plugin is enabled at user level on each Mac. Start a new Codex task after installation to load its skill; existing tasks created before installation may need a new task. Ordinary prompts such as “Use Email Agent to check my company mail” can select the skill. Mailbox notes load from local configuration when needed.
 
